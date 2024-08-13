@@ -1,5 +1,11 @@
+import { FileUpload } from "./ui/file-upload";
+
 const Content = () => {
-  return <div>Content</div>;
+  return (
+    <div>
+      <FileUpload />
+    </div>
+  )
 };
 
 export default Content;
