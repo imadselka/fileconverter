@@ -1,11 +1,15 @@
-import { FileUpload } from "./ui/file-upload";
+import FileUpload from "./FileUpload";
 
 const Content = () => {
   return (
-    <div>
+    <div className="flex flex-col justify-center items-center gap-10">
+      <div className="flex flex-col justify-center items-center">
+        <h1 className="text-[70px]">Free File Converter</h1>
+        <span>Convert your files to any format you want, for free.</span>
+      </div>
       <FileUpload />
     </div>
-  )
+  );
 };
 
 export default Content;
