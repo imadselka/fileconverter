@@ -67,3 +67,16 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes border-beam {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-border-beam {
+  animation: border-beam var(--duration) s linear infinite;
+}
