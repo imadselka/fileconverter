@@ -48,7 +48,7 @@ const FileUpload = () => {
           className="hidden"
         />
       </div> */}
-      <AfterFileUploaded fileName="" fileSize="" />
+      <AfterFileUploaded fileName="cancer.pdf" fileSize="3.35 MB" />
     </>
   );
 };
