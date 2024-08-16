@@ -1,11 +1,10 @@
-import { cn } from "@/lib/utils";
+import { motion } from "framer-motion";
 
 interface BorderBeamProps {
   className?: string;
   size?: number;
   duration?: number;
   borderWidth?: number;
-  anchor?: number;
   colorFrom?: string;
   colorTo?: string;
   delay?: number;
@@ -13,9 +12,8 @@ interface BorderBeamProps {
 
 export const BorderBeam = ({
   className,
-  size = 100,
-  duration = 15,
-  anchor = 100,
+  size = 200,
+  duration = 10,
   borderWidth = 2,
   colorFrom = "#ffaa40",
   colorTo = "#9c40ff",
@@ -23,27 +21,37 @@ export const BorderBeam = ({
 }: BorderBeamProps) => {
   return (
     <div
-      style={
-        {
-          "--size": `${size}px`,
-          "--duration": `${duration}s`,
-          "--anchor": `${anchor}%`,
-          "--border-width": `${borderWidth}px`,
-          "--color-from": colorFrom,
-          "--color-to": colorTo,
-          "--delay": `-${delay}s`,
-        } as React.CSSProperties
-      }
-      className={cn(
-        "absolute inset-0 rounded-inherit",
-        "mask-[linear-gradient(transparent,transparent),linear-gradient(white,white)]",
-        "mask-clip-[padding-box,border-box] mask-composite-intersect",
-        "after:absolute after:aspect-square after:w-[100px] after:h-[10px] after:animate-border-beam",
-        "after:[animation-delay:var(--delay)] after:[background:linear-gradient(to_left,var(--color-from),var(--color-to),transparent)]",
-        "after:[offset-anchor:var(--anchor)_50%] after:[offset-path:rect(0_auto_auto_0_round_calc(var(--size)))]",
-        "z-10", // Ensure BorderBeam has a lower z-index
-        className
-      )}
-    />
+      className={`relative flex items-center justify-center overflow-hidden rounded-lg ${className}`}
+      style={{
+        width: `${size}px`,
+        height: `${size}px`,
+        borderWidth: `${borderWidth}px`,
+      }}
+    >
+      <motion.div
+        className="absolute top-0 left-0 w-full h-full rounded-[inherit] pointer-events-none"
+        style={{
+          borderWidth: `${borderWidth}px`,
+          borderStyle: "solid",
+          borderImage: `linear-gradient(to right, ${colorFrom}, ${colorTo}) 1`,
+        }}
+        initial={{ clipPath: "inset(0% 0% 100% 0%)" }}
+        animate={{
+          clipPath: [
+            "inset(0% 0% 100% 0%)",
+            "inset(0% 0% 0% 0%)",
+            "inset(100% 0% 0% 0%)",
+            "inset(100% 0% 0% 100%)",
+            "inset(0% 0% 100% 100%)",
+          ],
+        }}
+        transition={{
+          duration: duration,
+          ease: "linear",
+          repeat: Infinity,
+          repeatDelay: delay,
+        }}
+      />
+    </div>
   );
 };

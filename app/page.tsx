@@ -4,7 +4,7 @@ import NavBar from "@/components/NavBar";
 
 export default function Home() {
   return (
-    <main className="flex flex-col w-screen h-screen">
+    <main className="flex flex-col w-screen h-screen gap-2">
       <NavBar />
       <Content />
       <Footer />

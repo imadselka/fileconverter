@@ -64,6 +64,13 @@ const config = {
         sm: "calc(var(--radius) - 4px)",
       },
       keyframes: {
+        "border-beam-animation": {
+          "0%": { "clip-path": "inset(0% 0% 100% 0%)" },
+          "25%": { "clip-path": "inset(0% 0% 0% 0%)" },
+          "50%": { "clip-path": "inset(0% 100% 0% 0%)" },
+          "75%": { "clip-path": "inset(100% 100% 0% 0%)" },
+          "100%": { "clip-path": "inset(100% 0% 0% 0%)" },
+        },
         "accordion-down": {
           from: { height: "0" },
           to: { height: "var(--radix-accordion-content-height)" },
