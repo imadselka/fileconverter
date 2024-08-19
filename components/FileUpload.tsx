@@ -1,30 +1,23 @@
 "use client";
+
 import { useRef, useState } from "react";
 import { BiCloudUpload } from "react-icons/bi";
 import AfterFileUploaded from "./AfterFileUploaded";
 import AnimatedBorder from "./AnimatedBorder";
+import { Input } from "./ui/input";
 
 const FileUpload = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadedFile, setUploadedFile] = useState<{
-    name: string;
-    size: string;
-  } | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
 
   const handleClick = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
+    fileInputRef.current?.click();
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Convert file size to a readable format
-      const fileSize = (file.size / (1024 * 1024)).toFixed(2) + " MB";
-
-      // Set the uploaded file's information
-      setUploadedFile({ name: file.name, size: fileSize });
+      setUploadedFile(file);
     }
   };
 
@@ -47,13 +40,10 @@ const FileUpload = () => {
           </div>
         </div>
       ) : (
-        <AfterFileUploaded
-          fileName={uploadedFile.name}
-          fileSize={uploadedFile.size}
-        />
+        <AfterFileUploaded fileUpload={uploadedFile} />
       )}
 
-      <input
+      <Input
         type="file"
         ref={fileInputRef}
         onChange={handleFileChange}

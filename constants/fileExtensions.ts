@@ -1,21 +1,29 @@
 export const fileExtensions = {
-  image: ["png", "jpeg", "jpg", "gif", "webp", "tiff"],
+  image: ["png", "jpg", "gif", "webp", "tiff"],
   document: ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx"],
   audio: ["mp3", "wav", "aac", "flac", "ogg"],
   video: ["mp4", "mov", "avi", "mkv", "flv", "wmv"],
 };
 
-// Function to get extensions based on file type
 export const getExtensionsByType = (fileType: string): string[] => {
-  switch (fileType) {
-    case "image":
+  switch (true) {
+    case fileType.startsWith("image/"):
       return fileExtensions.image;
-    case "document":
-      return fileExtensions.document;
-    case "audio":
+    case fileType.startsWith("audio/"):
       return fileExtensions.audio;
-    case "video":
+    case fileType.startsWith("video/"):
       return fileExtensions.video;
+    case fileType === "application/pdf":
+    case fileType === "application/msword":
+    case fileType ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    case fileType === "application/vnd.ms-excel":
+    case fileType ===
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+    case fileType === "application/vnd.ms-powerpoint":
+    case fileType ===
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+      return fileExtensions.document;
     default:
       return [];
   }

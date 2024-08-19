@@ -1,3 +1,4 @@
+"use client";
 import FileUpload from "./FileUpload";
 
 const Content = () => {

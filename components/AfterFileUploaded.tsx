@@ -1,150 +1,270 @@
+"use client";
+
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { getExtensionsByType } from "@/constants/fileExtensions"; // Adjust path as necessary
-import { AlertTriangleIcon, CheckCircle2Icon } from "lucide-react";
-import { useEffect, useState } from "react";
-import AnimatedBorder from "./AnimatedBorder";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/use-toast";
+import { getExtensionsByType } from "@/constants/fileExtensions";
+import { Action } from "@/types/Action";
+import bytesToSize from "@/utils/bytesToSize";
+import compressFileName from "@/utils/compressFileName";
+import convertFile from "@/utils/convert";
+import fileToIcon from "@/utils/fileToIcon";
+import loadFfmpeg from "@/utils/loadffmpeg";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { useEffect, useRef, useState } from "react";
+import { BiError } from "react-icons/bi";
+import { FiUploadCloud } from "react-icons/fi";
+import { HiOutlineDownload } from "react-icons/hi";
+import { ImSpinner3 } from "react-icons/im";
+import { MdClose } from "react-icons/md";
 
-interface AfterFileUploadedProps {
-  fileName: string;
-  fileSize: string;
-}
-
-const AfterFileUploaded = ({ fileName, fileSize }: AfterFileUploadedProps) => {
-  const [fileType, setFileType] = useState<string>("document");
-  const [extensions, setExtensions] = useState<string[]>([]);
-  const [conversionStatus, setConversionStatus] = useState<
-    "pending" | "success" | "failed"
-  >("pending");
-
-  useEffect(() => {
-    const fileExtension = fileName.split(".").pop()?.toLowerCase();
-    const fileExtType = fileExtension
-      ? getExtensionsByType("image").includes(fileExtension)
-        ? "image"
-        : getExtensionsByType("document").includes(fileExtension)
-        ? "document"
-        : getExtensionsByType("audio").includes(fileExtension)
-        ? "audio"
-        : getExtensionsByType("video").includes(fileExtension)
-        ? "video"
-        : "document"
-      : "document";
-
-    setFileType(fileExtType);
-    setExtensions(getExtensionsByType(fileExtType));
-  }, [fileName]);
-
-  const truncateFileName = (name: string) => {
-    if (name.length <= 14) return name;
-    return `${name.slice(0, 10)}...${name.slice(-4)}`;
-  };
-
-  const handleConversion = () => {
-    console.log("Converting file...");
-    setConversionStatus("pending");
-
-    setTimeout(() => {
-      const success = Math.random() > 0.3;
-      if (success) {
-        setConversionStatus("success");
-      } else {
-        setConversionStatus("failed");
-      }
-    }, 2000);
-  };
-
-  const handleDownload = () => {
-    console.log("Downloading file...");
-  };
-
-  return (
-    <div className="relative flex flex-col items-start gap-4 rounded-2xl bg-gradient-to-br from-gray-200/60 to-gray-500/40 dark:from-gray-400/40 dark:to-gray-600/20 p-6 w-[700px] h-auto">
-      <div className="flex items-center justify-between w-full">
-        <div className="flex items-center gap-2 w-full overflow-hidden">
-          <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate max-w-[350px]">
-            {truncateFileName(fileName)}
-          </span>
-          <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-            {fileSize}
-          </span>
-          {conversionStatus === "success" && (
-            <div className="flex flex-row items-center gap-2 border border-green-700 rounded-xl px-2">
-              <span className="text-sm text-green-700">Done</span>
-              <CheckCircle2Icon
-                size={20}
-                color="green"
-                className="flex-shrink-0"
-              />
-            </div>
-          )}
-          {conversionStatus === "failed" && (
-            <div className="flex flex-row items-center gap-2 border border-red-700 rounded-xl px-2">
-              <span className="text-sm text-red-700">Conversion Failed</span>
-              <AlertTriangleIcon
-                size={20}
-                color="red"
-                className="flex-shrink-0"
-              />
-            </div>
-          )}
-        </div>
-        <div className="relative z-10">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="text-sm">
-                {conversionStatus === "success"
-                  ? "Convert Another File"
-                  : "Choose Format"}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56 z-20">
-              <DropdownMenuLabel>Convert To</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuRadioGroup>
-                {extensions.map((ext) => (
-                  <DropdownMenuRadioItem key={ext} value={ext}>
-                    {ext.toUpperCase()}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-
-      <div className="flex flex-col items-end w-full">
-        {conversionStatus === "pending" ? (
-          <Button onClick={handleConversion}>Convert</Button>
-        ) : conversionStatus === "success" ? (
-          <>
-            <Button className="bg-green-600 text-white">Done</Button>
-            <Button onClick={handleDownload} className="mt-2">
-              Download
-            </Button>
-          </>
-        ) : (
-          <Button
-            variant="outline"
-            onClick={handleConversion}
-            className="text-red-700 border-red-700"
-          >
-            Retry Conversion
-          </Button>
-        )}
-      </div>
-
-      <AnimatedBorder />
-    </div>
-  );
+type AfterFileUploadType = {
+  fileUpload: File | null;
 };
 
-export default AfterFileUploaded;
+export default function AfterFileUploaded({ fileUpload }: AfterFileUploadType) {
+  const { toast } = useToast();
+  const [isHover, setIsHover] = useState<boolean>(false);
+  const [actions, setActions] = useState<Action[]>([]);
+  const [isReady, setIsReady] = useState<boolean>(false);
+  const [isLoaded, setIsLoaded] = useState<boolean>(false);
+  const [isConverting, setIsConverting] = useState<boolean>(false);
+  const [isDone, setIsDone] = useState<boolean>(false);
+  const ffmpegRef = useRef<FFmpeg | null>(null);
+
+  // Reset state
+  const reset = () => {
+    setIsDone(false);
+    setActions([]);
+    setIsReady(false);
+    setIsConverting(false);
+  };
+
+  // Convert files
+  const convert = async (): Promise<void> => {
+    console.log(
+      "File Types: ",
+      actions.map((action) => action.file_type)
+    ); // Debugging
+    const tmpActions = actions.map((action) => ({
+      ...action,
+      is_converting: true,
+    }));
+    setActions(tmpActions);
+    setIsConverting(true);
+
+    for (let action of tmpActions) {
+      try {
+        const { url, output } = await convertFile(ffmpegRef.current!, action);
+        setActions((prevActions) =>
+          prevActions.map((elt) =>
+            elt.file_name === action.file_name
+              ? {
+                  ...elt,
+                  is_converted: true,
+                  is_converting: false,
+                  url,
+                  output,
+                }
+              : elt
+          )
+        );
+      } catch (err) {
+        setActions((prevActions) =>
+          prevActions.map((elt) =>
+            elt.file_name === action.file_name
+              ? {
+                  ...elt,
+                  is_converted: false,
+                  is_converting: false,
+                  is_error: true,
+                }
+              : elt
+          )
+        );
+        toast({
+          variant: "destructive",
+          title: "Conversion Failed",
+          description: `Failed to convert ${action.file_name}. Please try again.`,
+          duration: 5000,
+        });
+      }
+    }
+
+    setIsDone(true);
+    setIsConverting(false);
+  };
+
+  // Initialize action for the uploaded file
+  useEffect(() => {
+    if (fileUpload) {
+      const action: Action = {
+        file_name: fileUpload.name,
+        file_size: fileUpload.size,
+        from: fileUpload.name.split(".").pop() || "",
+        to: String(null),
+        file_type: fileUpload.type,
+        file: fileUpload,
+        is_converted: false,
+        is_converting: false,
+        is_error: false,
+      };
+      setActions([action]);
+    }
+  }, [fileUpload]);
+
+  // Check if conversion is ready
+  useEffect(() => {
+    const ready = actions.every((action) => action.to !== null);
+    setIsReady(ready);
+  }, [actions]);
+
+  // Load FFmpeg
+  useEffect(() => {
+    load();
+  }, []);
+
+  const load = async () => {
+    const ffmpegResponse: FFmpeg = await loadFfmpeg();
+    ffmpegRef.current = ffmpegResponse;
+    setIsLoaded(true);
+  };
+
+  const updateAction = (file_name: string, to: string | null) => {
+    setActions((prevActions) =>
+      prevActions.map((action) =>
+        action.file_name === file_name ? { ...action, to } : action
+      )
+    );
+  };
+
+  const deleteAction = (action: Action): void => {
+    setActions((prevActions) =>
+      prevActions.filter((a) => a.file_name !== action.file_name)
+    );
+  };
+
+  const downloadAll = (): void => {
+    for (let action of actions) {
+      if (!action.is_error) download(action);
+    }
+  };
+
+  const download = (action: Action) => {
+    const a = document.createElement("a");
+    a.style.display = "none";
+    a.href = action.url!;
+    a.download = action.output!;
+    document.body.appendChild(a);
+    a.click();
+    URL.revokeObjectURL(action.url!);
+    document.body.removeChild(a);
+  };
+
+  if (actions.length) {
+    return (
+      <div className="space-y-6">
+        {actions.map((action, i) => (
+          <div
+            key={i}
+            className="relative flex flex-wrap items-center justify-between w-full px-4 py-4 space-y-2 border cursor-pointer lg:py-0 rounded-xl h-fit lg:h-20 lg:px-10 lg:flex-nowrap"
+          >
+            {!isLoaded && (
+              <Skeleton className="absolute w-full h-full -ml-10 cursor-progress rounded-xl" />
+            )}
+            <div className="flex flex-row justify-center items-center gap-4">
+              <span className="text-2xl text-orange-600">
+                {fileToIcon(action.file_type)}
+              </span>
+              <div className="flex flex-row items-center gap-1 w-96">
+                <span className="font-medium truncate w-60 sm:w-full">
+                  {compressFileName(action.file_name)}
+                </span>
+              </div>
+              <div className="flex justify-center items-center">
+                <Badge variant={"secondary"} className="m-2 h-10 ">
+                  <span className="m-2">{bytesToSize(action.file_size)}</span>
+                </Badge>
+              </div>
+            </div>
+            <div className="flex items-center p-2 gap-6 lg:gap-20">
+              <Select
+                disabled={!isLoaded || action.is_converting || isConverting}
+                onValueChange={(to) => updateAction(action.file_name, to)}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Convert to..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {getExtensionsByType(action.file_type).map((ext: string) => (
+                    <SelectItem key={ext} value={ext}>
+                      {ext}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="hidden lg:block">
+                {!isConverting && !action.is_converted && (
+                  <Button
+                    disabled={!isReady || isConverting}
+                    onClick={convert}
+                    className="gap-1"
+                  >
+                    <FiUploadCloud size={16} />
+                    <span className="font-semibold">Convert</span>
+                  </Button>
+                )}
+              </div>
+              <div className="flex gap-2 lg:gap-6">
+                {!isConverting && !action.is_converted && (
+                  <button
+                    type="button"
+                    className="p-2 text-xl text-gray-500 rounded-lg hover:bg-gray-300/30"
+                    onClick={() => deleteAction(action)}
+                  >
+                    <MdClose />
+                  </button>
+                )}
+                {isConverting && !action.is_converted && (
+                  <button
+                    disabled
+                    className="p-2 text-xl text-blue-500 bg-blue-200 rounded-lg cursor-progress"
+                  >
+                    <ImSpinner3 className="animate-spin" />
+                  </button>
+                )}
+                {isDone && !action.is_error && action.is_converted && (
+                  <button
+                    type="button"
+                    onClick={() => download(action)}
+                    className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-300/30"
+                  >
+                    Download
+                    <HiOutlineDownload />
+                  </button>
+                )}
+                {isDone && action.is_error && (
+                  <button
+                    type="button"
+                    className="p-2 text-xl text-red-600 bg-red-300 rounded-lg"
+                  >
+                    <BiError />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return null;
+}
