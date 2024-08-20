@@ -1,5 +1,6 @@
 "use client";
-import FileUpload from "./FileUpload";
+
+import { FileUpload } from "./FileUpload";
 
 const Content = () => {
   return (

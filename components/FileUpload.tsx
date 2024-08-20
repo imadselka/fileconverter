@@ -6,7 +6,7 @@ import AfterFileUploaded from "./AfterFileUploaded";
 import AnimatedBorder from "./AnimatedBorder";
 import { Input } from "./ui/input";
 
-const FileUpload = () => {
+export const FileUpload = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
 
@@ -18,6 +18,7 @@ const FileUpload = () => {
     const file = event.target.files?.[0];
     if (file) {
       setUploadedFile(file);
+      event.target.value = ""; // Clear the input field to allow the same file to be re-uploaded
     }
   };
 
@@ -40,7 +41,10 @@ const FileUpload = () => {
           </div>
         </div>
       ) : (
-        <AfterFileUploaded fileUpload={uploadedFile} />
+        <AfterFileUploaded
+          fileUpload={uploadedFile}
+          resetUpload={() => setUploadedFile(null)}
+        />
       )}
 
       <Input
@@ -52,5 +56,3 @@ const FileUpload = () => {
     </div>
   );
 };
-
-export default FileUpload;
