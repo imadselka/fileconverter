@@ -8,7 +8,7 @@ export async function convertDocument(
   formData.append("file", file);
   formData.append("targetFormat", targetFormat);
 
-  const response = await axios.post("/api/convert", formData, {
+  const response = await axios.post("@/app/api/documentConversion", formData, {
     headers: {
       "Content-Type": "multipart/form-data",
     },

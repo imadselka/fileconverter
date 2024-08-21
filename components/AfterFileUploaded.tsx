@@ -25,11 +25,12 @@ import { FiUploadCloud } from "react-icons/fi";
 import { HiOutlineDownload } from "react-icons/hi";
 import { ImSpinner3 } from "react-icons/im";
 import { MdClose } from "react-icons/md";
-// TODO: fix the document conversion process check the api/convert.ts maybe there is some issues within it
+
 type AfterFileUploadType = {
   fileUpload: File | null;
   resetUpload: () => void;
 };
+
 export default function AfterFileUploaded({
   fileUpload,
   resetUpload,
@@ -41,6 +42,7 @@ export default function AfterFileUploaded({
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
   const [isConverting, setIsConverting] = useState<boolean>(false);
   const [isDone, setIsDone] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const ffmpegRef = useRef<FFmpeg | null>(null);
 
   useEffect(() => {
@@ -63,7 +65,7 @@ export default function AfterFileUploaded({
       file_name: file.name,
       file_size: file.size,
       from: file.name.split(".").pop() || "",
-      to: String(null),
+      to: null,
       file_type: file.type,
       file: file,
       is_converted: false,
@@ -78,6 +80,7 @@ export default function AfterFileUploaded({
     ffmpegRef.current = ffmpegResponse;
     setIsLoaded(true);
   };
+
   const updateAction = (file_name: string, to: string | null) => {
     setActions((prevActions) =>
       prevActions.map((action) =>
@@ -113,7 +116,18 @@ export default function AfterFileUploaded({
   };
 
   const convert = async (): Promise<void> => {
+    if (actions.some((action) => action.to === null)) {
+      toast({
+        variant: "destructive",
+        title: "Conversion Failed",
+        description: `Please select a conversion format.`,
+        duration: 5000,
+      });
+      return;
+    }
+
     setIsConverting(true);
+
     const tmpActions = actions.map((action) => ({
       ...action,
       is_converting: true,
@@ -144,6 +158,7 @@ export default function AfterFileUploaded({
     setIsDone(true);
     setIsConverting(false);
   };
+
   const updateConvertedAction = (
     file_name: string,
     url: string,
@@ -189,6 +204,11 @@ export default function AfterFileUploaded({
 
   return (
     <div className="space-y-6">
+      {errorMessage && (
+        <div className="text-red-600 bg-red-100 p-4 rounded-lg mb-4">
+          {errorMessage}
+        </div>
+      )}
       {actions.map((action, i) => (
         <ActionCard
           key={i}
@@ -205,6 +225,7 @@ export default function AfterFileUploaded({
     </div>
   );
 }
+
 const ActionCard = ({
   action,
   isLoaded,
@@ -229,81 +250,109 @@ const ActionCard = ({
       {!isLoaded && (
         <Skeleton className="absolute w-full h-full -ml-10 cursor-progress rounded-xl" />
       )}
-      <div className="flex flex-row justify-center items-center gap-4">
+      <div className="flex flex-row justify-center items-center gap-4 w-full lg:w-auto">
         <span className="text-2xl text-orange-800 dark:text-orange-400">
           {fileToIcon(action.file_type)}
         </span>
-        <div className="flex flex-row items-center gap-1 w-96">
-          <span className="font-medium truncate w-60 sm:w-full">
+        <div className="flex flex-row items-center gap-1 w-40 sm:w-60 md:w-96">
+          <span className="font-medium truncate w-full">
             {compressFileName(action.file_name)}
           </span>
         </div>
         <div className="flex justify-center items-center">
-          <Badge variant={"secondary"} className="m-2 h-10 ">
+          <Badge variant={"secondary"} className="m-2 h-10">
             <span className="m-2">{bytesToSize(action.file_size)}</span>
           </Badge>
         </div>
-        ...
       </div>
-      <div className="flex items-center p-2 gap-6 lg:gap-20">
+      <div className="flex items-center p-2 gap-6 lg:gap-20 w-full lg:w-auto">
         <Select
-          disabled={!isLoaded || action.is_converting || isConverting}
+          disabled={
+            !isLoaded ||
+            action.is_converting ||
+            isConverting ||
+            action.is_converted
+          }
           onValueChange={(to) => updateAction(action.file_name, to)}
         >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Convert to..." />
+          <SelectTrigger className="w-full lg:w-[180px]">
+            <SelectValue placeholder="Format" className="w-full" />
           </SelectTrigger>
           <SelectContent>
-            {getExtensionsByType(action.file_type).map((ext: string) => (
-              <SelectItem key={ext} value={ext}>
-                {ext}
-              </SelectItem>
-            ))}
+            {getExtensionsByType(action.file_type)
+              .filter((ext: string) => ext !== action.from)
+              .map((ext: string) => (
+                <SelectItem key={ext} value={ext}>
+                  {ext}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
-        <div className="hidden lg:block">
+        <div className="flex flex-col gap-4 md:flex-row lg:flex-row">
           {!isConverting && !action.is_converted && (
-            <Button disabled={isConverting} onClick={convert} className="gap-1">
-              <FiUploadCloud size={16} />
-              <span className="font-semibold">Convert</span>
-            </Button>
+            <div className="flex flex-col gap-4 md:flex-row lg:flex-row">
+              <Button
+                variant="ghost"
+                disabled={isConverting}
+                onClick={convert}
+                className="flex items-center gap-1"
+              >
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold">Convert</span>
+                  <FiUploadCloud size={16} />
+                </div>
+              </Button>
+              <Button
+                variant="ghost"
+                className="p-2 rounded-lg w-full lg:w-auto"
+                onClick={() => deleteAction(action)}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="">Convert another file</span>
+                  <MdClose />
+                </div>
+              </Button>
+            </div>
           )}
         </div>
-        <div className="flex gap-2 lg:gap-6">
-          {!isConverting && !action.is_converted && (
-            <button
-              type="button"
-              className="p-2 text-xl text-gray-500 rounded-lg hover:bg-gray-300/30"
-              onClick={() => deleteAction(action)}
-            >
-              <MdClose />
-            </button>
-          )}
+        <div className="flex gap-2 lg:gap-6 w-full lg:w-auto">
           {isConverting && !action.is_converted && (
-            <button
+            <Button
               disabled
-              className="p-2 text-xl text-blue-500 bg-blue-200 rounded-lg cursor-progress"
+              className="p-2 text-xl text-blue-500 bg-blue-200 rounded-lg cursor-progress w-full lg:w-auto"
             >
               <ImSpinner3 className="animate-spin" />
-            </button>
+            </Button>
           )}
           {isDone && !action.is_error && action.is_converted && (
-            <button
-              type="button"
-              onClick={() => download(action)}
-              className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-300/30"
-            >
-              Download
-              <HiOutlineDownload />
-            </button>
+            <div className="flex flex-col gap-4 md:flex-row lg:flex-row">
+              <Button
+                variant="ghost"
+                onClick={() => download(action)}
+                className="flex items-center gap-2 p-2 rounded-lg w-full lg:w-auto"
+              >
+                Download
+                <HiOutlineDownload />
+              </Button>
+
+              <Button
+                variant="ghost"
+                onClick={() => deleteAction(action)}
+                className="flex items-center gap-2 p-2 rounded-lg w-full lg:w-auto"
+              >
+                Convert another file
+              </Button>
+            </div>
           )}
           {isDone && action.is_error && (
-            <button
-              type="button"
-              className="p-2 text-xl text-red-600 bg-red-300 rounded-lg"
-            >
-              <BiError />
-            </button>
+            <div className="flex flex-col gap-4 md:flex-row lg:flex-row">
+              <Button
+                type="button"
+                className="p-2 text-xl text-red-600 bg-red-300 hover:bg-red-200/50 rounded-lg w-full lg:w-auto"
+              >
+                <BiError />
+              </Button>
+            </div>
           )}
         </div>
       </div>
