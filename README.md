@@ -23,14 +23,14 @@ The File Converter is a web application that allows users to convert their files
 ## Features
 
 - **File Upload**: Users can upload files by clicking or dragging and dropping them into the designated area.
-- **File Conversion**: Supports conversion of various file formats including documents (pdf, doc, docx, xls, xlsx, ppt, pptx, csv) and media files.
+- **File Conversion**: Supports conversion of various file formats including documents (pdf, doc, docx...) **DOESNT WORK FOR NOW AND I DONT THINK IT WILL** and media files **images / videos**.
 - **Progress Tracking**: Users can track the conversion progress and download the converted files once the process is complete.
 - **Error Handling**: Provides feedback in case of conversion failures and allows users to retry the conversion.
 
 ## Tech Stack
 
 - **Frontend**: React, Next.js, Tailwind CSS
-- **Backend**: Node.js, CloudConvert API
+- **Backend**: CloudConvert API
 - **Utilities**: Axios, Framer Motion, Radix UI, FFmpeg
 
 ## Idea Behind the Project
@@ -99,7 +99,6 @@ I created the File Converter because I was frustrated with the existing file con
 ## Code Structure
 
 - **components**: Contains React components for the UI, including `Content`, `FileUpload`, and `AfterFileUploaded`.
-- **app/api**: Contains the API route for handling file conversion requests.
 - **utils**: Contains utility functions such as `cloudConvertService` for interacting with the CloudConvert API.
 
 ## Contributing
