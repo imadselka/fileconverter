@@ -1,8 +1,8 @@
 // utils/compressFileName.ts
 export default function compressFileName(
   name: string,
-  min: number = 5,
-  max: number = 20
+  min: number = 10,
+  max: number = 30
 ): string {
   const extIndex = name.lastIndexOf(".");
 

@@ -2,7 +2,7 @@ export type Action = {
   file_name: string;
   file_size: number;
   from: string;
-  to: string | null; 
+  to: string;
   file_type: string;
   file: File;
   is_converted: boolean;

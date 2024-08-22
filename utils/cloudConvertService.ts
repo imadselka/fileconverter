@@ -1,22 +1,53 @@
 import axios from "axios";
 
-export async function convertDocument(
+const getApiKey = (): string => {
+  const apiKey = process.env.CLOUD_CONVERT_API_KEY;
+  if (!apiKey) {
+    throw new Error("CloudConvert API key is not set");
+  }
+  return apiKey;
+};
+
+export const convertDocument = async (
   file: File,
   targetFormat: string
-): Promise<{ url: string; output: string }> {
+): Promise<{ url: string; output: string }> => {
   const formData = new FormData();
   formData.append("file", file);
-  formData.append("targetFormat", targetFormat);
+  formData.append("target_format", targetFormat);
 
-  const response = await axios.post("@/app/api/documentConversion", formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
-  });
+  try {
+    const response = await axios.post(
+      "https://api.cloudconvert.com/v2/jobs",
+      {
+        tasks: {
+          "import-my-file": {
+            operation: "import/upload",
+          },
+          "convert-my-file": {
+            operation: "convert",
+            input: "import-my-file",
+            output_format: targetFormat,
+          },
+          "export-my-file": {
+            operation: "export/url",
+            input: "convert-my-file",
+          },
+        },
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${getApiKey()}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
 
-  if (response.status !== 200) {
-    throw new Error("Failed to convert document");
+    const jobId = response.data.id;
+    // Handle the jobId as needed
+    return { url: response.data.url, output: response.data.output };
+  } catch (error) {
+    console.error("Error converting document:", error);
+    throw error;
   }
-
-  return response.data;
-}
+};

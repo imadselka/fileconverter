@@ -36,7 +36,6 @@ export default function AfterFileUploaded({
   resetUpload,
 }: AfterFileUploadType) {
   const { toast } = useToast();
-  const [isHover, setIsHover] = useState<boolean>(false);
   const [actions, setActions] = useState<Action[]>([]);
   const [isReady, setIsReady] = useState<boolean>(false);
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
@@ -65,7 +64,7 @@ export default function AfterFileUploaded({
       file_name: file.name,
       file_size: file.size,
       from: file.name.split(".").pop() || "",
-      to: null,
+      to: "",
       file_type: file.type,
       file: file,
       is_converted: false,
@@ -81,7 +80,7 @@ export default function AfterFileUploaded({
     setIsLoaded(true);
   };
 
-  const updateAction = (file_name: string, to: string | null) => {
+  const updateAction = (file_name: string, to: string) => {
     setActions((prevActions) =>
       prevActions.map((action) =>
         action.file_name === file_name ? { ...action, to } : action
@@ -94,39 +93,38 @@ export default function AfterFileUploaded({
       prevActions.filter((a) => a.file_name !== action.file_name)
     );
     if (actions.length <= 1) {
-      resetUpload(); // Reset the upload when the last or only action is deleted
+      resetUpload();
     }
   };
 
   const download = (action: Action) => {
+    if (!action.url || !action.output) {
+      console.error("Download failed: URL or output filename is missing");
+      return;
+    }
     const a = document.createElement("a");
     a.style.display = "none";
-    a.href = action.url!;
-    a.download = action.output!;
+    a.href = action.url;
+    a.download = action.output;
     document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(action.url!);
+    URL.revokeObjectURL(action.url);
     document.body.removeChild(a);
   };
 
-  const downloadAll = (): void => {
-    for (let action of actions) {
-      if (!action.is_error) download(action);
-    }
-  };
-
   const convert = async (): Promise<void> => {
-    if (actions.some((action) => action.to === null)) {
+    if (actions.some((action) => !action.to)) {
       toast({
         variant: "destructive",
         title: "Conversion Failed",
-        description: `Please select a conversion format.`,
+        description: "Please select a conversion format for all files.",
         duration: 5000,
       });
       return;
     }
 
     setIsConverting(true);
+    setErrorMessage(null);
 
     const tmpActions = actions.map((action) => ({
       ...action,
@@ -141,17 +139,27 @@ export default function AfterFileUploaded({
             action.from
           )
         ) {
-          const { url, output } = await convertDocument(
-            action.file!,
-            action.to!
-          );
-          updateConvertedAction(action.file_name, url, output);
+          if (!action.file || !action.to) {
+            throw new Error("File or target format is missing");
+          }
+          const result = await convertDocument(action.file, action.to);
+          if (result && result.url && result.output) {
+            updateConvertedAction(action.file_name, result.url, result.output);
+          } else {
+            throw new Error("Invalid conversion result");
+          }
         } else {
-          const { url, output } = await convertFile(ffmpegRef.current!, action);
+          if (!ffmpegRef.current) {
+            throw new Error("FFmpeg is not initialized");
+          }
+          const { url, output } = await convertFile(ffmpegRef.current, action);
           updateConvertedAction(action.file_name, url, output);
         }
       } catch (err) {
-        handleConversionError(action.file_name);
+        handleConversionError(
+          action.file_name,
+          err instanceof Error ? err.message : "An unknown error occurred"
+        );
       }
     }
 
@@ -179,7 +187,7 @@ export default function AfterFileUploaded({
     );
   };
 
-  const handleConversionError = (file_name: string) => {
+  const handleConversionError = (file_name: string, errorMessage: string) => {
     setActions((prevActions) =>
       prevActions.map((elt) =>
         elt.file_name === file_name
@@ -195,9 +203,10 @@ export default function AfterFileUploaded({
     toast({
       variant: "destructive",
       title: "Conversion Failed",
-      description: `Failed to convert ${file_name}. Please try again.`,
+      description: `Failed to convert ${file_name}. ${errorMessage}`,
       duration: 5000,
     });
+    console.error(`Conversion error for ${file_name}: ${errorMessage}`);
   };
 
   if (!actions.length) return null;
@@ -240,7 +249,7 @@ const ActionCard = ({
   isLoaded: boolean;
   isConverting: boolean;
   isDone: boolean;
-  updateAction: (file_name: string, to: string | null) => void;
+  updateAction: (file_name: string, to: string) => void;
   deleteAction: (action: Action) => void;
   convert: () => void;
   download: (action: Action) => void;
