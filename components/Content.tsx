@@ -1,6 +1,7 @@
 "use client";
 
 import { FileUpload } from "./FileUpload";
+import OtherUtilities from "./OtherUtilities";
 
 const Content = () => {
   return (
@@ -10,6 +11,7 @@ const Content = () => {
         <span>Convert your files to any format you want, for free.</span>
       </div>
       <FileUpload />
+      <OtherUtilities />
     </div>
   );
 };
