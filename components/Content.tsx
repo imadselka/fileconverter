@@ -1,9 +1,11 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { FileUpload } from "./FileUpload";
-import OtherUtilities from "./OtherUtilities";
+import { Button } from "./ui/button";
 
 const Content = () => {
+  const router = useRouter();
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col justify-center items-center">
@@ -11,7 +13,13 @@ const Content = () => {
         <span>Convert your files to any format you want, for free.</span>
       </div>
       <FileUpload />
-      <OtherUtilities />
+      <Button
+        variant="outline"
+        className="text-2xl w-[50%] mx-auto"
+        onClick={() => router.push("/utilities")}
+      >
+        Need Other Utilities?
+      </Button>
     </div>
   );
 };
