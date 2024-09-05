@@ -1,15 +1,15 @@
 export const utilities = [
   {
-    title: "CSV to JSON",
+    title: "JSON to CSV / CSV to JSON",
     description:
-      "Easily convert CSV data to JSON format with our free tool. Quickest way to turn tabular data into a JSON format for APIs and data processing.",
-    link: "utilities/csv-to-json",
+      "Eeasily convert JSON data to CSV format with our free tool. Quickest way to turn JSON data into a tabular format for data processing and analysis.",
+    link: "utilities/json-csv",
   },
   {
-    title: "Base64 Encode/Decode",
+    title: "JSON to YAML / YAML to JSON",
     description:
-      "Easily encode and decode Base64 data with our online utility, so you can transmit your data safely or decode Base64-encoded strings.",
-    link: "utilities/base64-encode-decode",
+      "Easily convert JSON to YAML with our converter. Useful when you're working with configuration files and need to switch between them.",
+    link: "utilities/json-yaml",
   },
   {
     title: "JSON Formatter",
@@ -18,21 +18,15 @@ export const utilities = [
     link: "utilities/json-formatter",
   },
   {
-    title: "YAML to JSON",
-    description:
-      "Easily convert YAML to JSON with our converter. Useful when you're working with configuration files and need to switch between them.",
-    link: "utilities/yaml-to-json",
-  },
-  {
-    title: "URL Encode/Decode",
+    title: "URL Encoder/Decoder",
     description:
       "Convert URLs to a safe format with URL encoding or decode URL-encoded strings back to their original format.",
-    link: "utilities/url-encode-decode",
+    link: "utilities/url-encoder-decoder",
   },
   {
-    title: "Timestamp to Date Converter",
+    title: "Regex Builder & Tester",
     description:
-      "Paste Unix timestamps and get human-readable dates. Perfect for developers working with time-based data.",
-    link: "utilities/timestamp-to-date-converter",
+      "Build and test regular expressions with our free tool. Quickly create regex patterns and test them against your test strings.",
+    link: "utilities/regex-builder-tester",
   },
 ];

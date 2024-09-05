@@ -13,7 +13,7 @@ const Content = () => {
         <span>Convert your files to any format you want, for free.</span>
       </div>
       <FileUpload />
-      <Button variant="outline" className="text-2xl w-[60%] mx-auto">
+      <Button variant="outline" className="text-2xl w-[95%] md:w-[60%] mx-auto">
         <Link href="/utilities" shallow>
           <div className="flex flex-row justify-center items-center gap-2">
             <TbListSearch />
