@@ -1,3 +1,5 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -6,35 +8,193 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { utilities } from "@/utils/otherUtilities";
+import {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+  CommandShortcut,
+} from "@/components/ui/command";
+import { GitFork, Home, UserRoundPlus } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+
+const utilities = [
+  {
+    title: "JSON to CSV / CSV to JSON",
+    description: "Convert between JSON and CSV formats.",
+    link: "utilities/json-csv",
+    shortcut: "Alt+J",
+  },
+  {
+    title: "JSON to YAML / YAML to JSON",
+    description: "Convert between JSON and YAML formats.",
+    link: "utilities/json-yaml",
+    shortcut: "Alt+Y",
+  },
+  {
+    title: "JSON Formatter",
+    description: "Format and beautify your JSON data.",
+    link: "utilities/json-formatter",
+    shortcut: "Alt+F",
+  },
+  {
+    title: "URL Encoder/Decoder",
+    description: "Encode or decode URLs safely.",
+    link: "utilities/url-encoder-decoder",
+    shortcut: "Alt+U",
+  },
+  {
+    title: "Regex Builder & Tester",
+    description: "Build and test regular expressions.",
+    link: "utilities/regex-builder-tester",
+    shortcut: "Alt+R",
+  },
+];
+
+const links = [
+  {
+    icon: GitFork,
+    title: "Contribute on GitHub",
+    href: "https://github.com/imadselka/fileconverter",
+    shortcut: "Alt+G",
+  },
+  {
+    icon: UserRoundPlus,
+    title: "Follow me on social media",
+    href: "https://linktr.ee/ImadSelka",
+    shortcut: "Alt+S",
+  },
+  { icon: Home, title: "Home", href: "/", shortcut: "Alt+H" },
+];
 
 export default function OtherUtilities() {
+  const [open, setOpen] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setOpen((open) => !open);
+      }
+    };
+
+    document.addEventListener("keydown", down);
+    return () => document.removeEventListener("keydown", down);
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey) {
+        const key = e.key.toLowerCase();
+        const utility = utilities.find((u) =>
+          u.shortcut.toLowerCase().endsWith(key)
+        );
+        const link = links.find((l) => l.shortcut.toLowerCase().endsWith(key));
+
+        if (utility) {
+          e.preventDefault();
+          router.push(utility.link);
+        } else if (link) {
+          e.preventDefault();
+          router.push(link.href);
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [router]);
+
   return (
-    <div className="flex flex-col gap-10 justify-center items-center">
-      <div className="flex flex-col gap-5">
-        <h1 className="text-4xl text-center mt-10">
-          Explore more utilities to make your life easier
-        </h1>
-        {/* TODO: ADD CMK use shadcn's or like vercel on so u can search for something or press the key to try something */}
+    <div className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground">
+      <div className="w-full max-w-4xl px-4">
+        <div className="flex flex-col justify-center items-center gap-5">
+          <h1 className="text-4xl font-bold text-center mt-10 mb-6">
+            Explore Utilities
+          </h1>
+          <div className="mb-8">
+            <Button
+              onClick={() => setOpen(true)}
+              className="w-[fit-content]"
+              variant="outline"
+            >
+              <div className="flex flex-row justify-center items-center md:gap-[15rem]">
+                <span className="mr-2">Search</span>
+                <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                  <span className="text-xs">⌘</span>K
+                </kbd>
+              </div>
+            </Button>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {utilities.map((utility) => (
+            <Card
+              key={utility.title}
+              className="flex flex-col justify-between h-full"
+            >
+              <CardHeader>
+                <CardTitle className="text-lg">{utility.title}</CardTitle>
+                <CardDescription className="text-sm">
+                  {utility.description}
+                </CardDescription>
+              </CardHeader>
+              <CardFooter>
+                <Link href={utility.link} className="w-full">
+                  <Button variant="outline" className="w-full">
+                    Try it
+                  </Button>
+                </Link>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
-        {utilities.map((utility) => (
-          <Card key={utility.title} className="flex flex-col justify-between">
-            <CardHeader>
-              <CardTitle>{utility.title}</CardTitle>
-              <CardDescription>{utility.description}</CardDescription>
-            </CardHeader>
-            <CardFooter>
-              <Link href={utility.link} className="w-full">
-                <Button variant="outline" className="w-full">
-                  Try it
-                </Button>
-              </Link>
-            </CardFooter>
-          </Card>
-        ))}
-      </div>
+      <CommandDialog open={open} onOpenChange={setOpen}>
+        <Command className="rounded-lg border shadow-md">
+          <CommandInput placeholder="Type a command or search..." />
+          <CommandList>
+            <CommandEmpty>No results found.</CommandEmpty>
+            <CommandGroup heading="Utilities">
+              {utilities.map((utility) => (
+                <CommandItem
+                  key={utility.title}
+                  onSelect={() => {
+                    router.push(utility.link);
+                    setOpen(false);
+                  }}
+                >
+                  <span>{utility.title}</span>
+                  <CommandShortcut>{utility.shortcut}</CommandShortcut>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            <CommandSeparator />
+            <CommandGroup heading="Links">
+              {links.map((link) => (
+                <CommandItem
+                  key={link.title}
+                  onSelect={() => {
+                    router.push(link.href);
+                    setOpen(false);
+                  }}
+                >
+                  <link.icon className="mr-2 h-4 w-4" />
+                  <span>{link.title}</span>
+                  <CommandShortcut>{link.shortcut}</CommandShortcut>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </CommandDialog>
     </div>
   );
 }
