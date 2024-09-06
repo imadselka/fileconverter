@@ -1,32 +1,49 @@
+import { GitFork, Home, UserRoundPlus } from "lucide-react";
+
 export const utilities = [
   {
     title: "JSON to CSV / CSV to JSON",
-    description:
-      "Eeasily convert JSON data to CSV format with our free tool. Quickest way to turn JSON data into a tabular format for data processing and analysis.",
+    description: "Convert between JSON and CSV formats.",
     link: "utilities/json-csv",
+    shortcut: "Alt+J",
   },
   {
     title: "JSON to YAML / YAML to JSON",
-    description:
-      "Easily convert JSON to YAML with our converter. Useful when you're working with configuration files and need to switch between them.",
+    description: "Convert between JSON and YAML formats.",
     link: "utilities/json-yaml",
+    shortcut: "Alt+Y",
   },
   {
     title: "JSON Formatter",
-    description:
-      "Format and beautify your JSON data for better readability and debugging. Quickly visualize and organize your JSON data with ease.",
+    description: "Format and beautify your JSON data.",
     link: "utilities/json-formatter",
+    shortcut: "Alt+F",
   },
   {
     title: "URL Encoder/Decoder",
-    description:
-      "Convert URLs to a safe format with URL encoding or decode URL-encoded strings back to their original format.",
+    description: "Encode or decode URLs safely.",
     link: "utilities/url-encoder-decoder",
+    shortcut: "Alt+U",
   },
   {
     title: "Regex Builder & Tester",
-    description:
-      "Build and test regular expressions with our free tool. Quickly create regex patterns and test them against your test strings.",
+    description: "Build and test regular expressions.",
     link: "utilities/regex-builder-tester",
+    shortcut: "Alt+R",
   },
+];
+export const links = [
+  {
+    icon: GitFork,
+    title: "Contribute on GitHub",
+    href: "https://github.com/imadselka/fileconverter",
+    shortcut: "Alt+G",
+  },
+  {
+    icon: UserRoundPlus,
+    title: "Follow me on social media",
+    href: "https://linktr.ee/ImadSelka",
+    shortcut: "Alt+S",
+  },
+  { icon: Home, title: "Home", href: "/", shortcut: "Alt+H" },
 ];

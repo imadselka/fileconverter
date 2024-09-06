@@ -29,7 +29,7 @@ export default function JsonToYaml() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className=" space-y-4">
       <textarea
         className="w-full h-40 p-2 border rounded"
         value={input}

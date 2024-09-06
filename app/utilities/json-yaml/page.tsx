@@ -18,7 +18,7 @@ export default function Page() {
   );
 
   return (
-    <Card className="max-w-2xl mx-auto mt-10 p-4">
+    <Card className="max-w-xl max-h-screen mx-auto mt-2 p-4">
       {" "}
       <CardHeader>
         {" "}
