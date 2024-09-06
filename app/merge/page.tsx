@@ -1,6 +1,9 @@
 "use client";
 
+import { Progress } from "@/components/progress";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -9,7 +12,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
-import { Progress } from "@radix-ui/react-progress";
 import { AnimatePresence, motion } from "framer-motion";
 import { PDFDocument } from "pdf-lib";
 import { useEffect, useState } from "react";
@@ -75,7 +77,7 @@ export default function MergePage() {
         // For simplicity, we're only handling PDFs here. You'd need to add logic for other file types.
 
         setProgress(((i + 1) / files.length) * 100);
-        await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate processing time
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
 
       const pdfBytes = await mergedPdf.save();
@@ -88,6 +90,7 @@ export default function MergePage() {
       toast({
         title: "Success",
         description: "Files merged successfully!",
+        variant: "default",
       });
     } catch (error) {
       console.error("Error merging files:", error);
@@ -163,14 +166,14 @@ export default function MergePage() {
           whileTap={{ scale: 0.95 }}
           className="mb-6"
         >
-          <label
+          <Label
             htmlFor="file-upload"
             className="cursor-pointer bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-2 px-4 rounded inline-flex items-center w-full justify-center"
           >
             <FaFileUpload className="mr-2" />
             <span>Choose files to merge</span>
-          </label>
-          <input
+          </Label>
+          <Input
             id="file-upload"
             type="file"
             multiple
@@ -197,14 +200,14 @@ export default function MergePage() {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ delay: index * 0.1 }}
-                    className="flex items-center justify-between bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-2 rounded"
+                    className="flex items-center justify-between w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-2 rounded"
                   >
-                    <div className="flex items-center space-x-2 flex-grow">
+                    <div className="flex justify-centeritems-center space-x-2  w-full flex-grow">
                       {getFileIcon(file)}
                       <span className="truncate flex-grow">{file.name}</span>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm text-muted-foreground">
+                    <div className="flex justify-center items-center space-x-2">
+                      <span className="flex-row text-sm text-muted-foreground">
                         {formatFileSize(file.size)}
                       </span>
                       <Button
@@ -214,7 +217,6 @@ export default function MergePage() {
                         className="text-destructive hover:text-destructive/90"
                       >
                         <FaTrash />
-                        <span className="sr-only">Delete file</span>
                       </Button>
                     </div>
                   </motion.li>
@@ -239,9 +241,10 @@ export default function MergePage() {
           <Button
             onClick={handleMerge}
             className="w-full"
+            variant="outline"
             disabled={files.length < 2 || isMerging}
           >
-            {isMerging ? "Merging Files..." : "Merge Files"}
+            {isMerging ? "Merging Files..." : "Merge Files (ONLY PDFs)"}
           </Button>
         </motion.div>
         {isMerging && (

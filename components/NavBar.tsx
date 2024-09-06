@@ -20,7 +20,10 @@ const NavBar = () => {
       transition={{ type: "spring", stiffness: 120 }}
       className="flex flex-wrap justify-between items-center w-full px-4 py-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
     >
-      <Link href="/" className="flex items-center space-x-2">
+      <Link
+        href="https://github.com/imadselka/fileconverter"
+        className="flex items-center space-x-2"
+      >
         <motion.div whileHover={{ scale: 1.1 }} className="flex items-center">
           <Logo />
           <span className="ml-2 text-2xl font-bold">FileConverter</span>
