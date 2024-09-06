@@ -46,7 +46,7 @@ export default function Page() {
   };
 
   return (
-    <div className="flex justify-center items-center min-h-screen">
+    <div className="flex justify-center items-center">
       <Card className="flex flex-col justify-center items-center w-full max-w-4xl lg:max-w-5xl h-full p-4">
         <CardHeader className="text-center">
           <CardTitle className="text-xl md:text-2xl">
@@ -81,6 +81,10 @@ export default function Page() {
                 testString={testString}
                 setTestString={setTestString}
                 matchOutput={matchOutput}
+                regexPattern={""}
+                setRegexPattern={function (input: string): void {
+                  throw new Error("Function not implemented.");
+                }}
               />
             </TabsContent>
           </Tabs>

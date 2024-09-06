@@ -27,10 +27,12 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <div className="flex flex-col max-h-screen">
+          <div className="flex flex-col">
             <NavBar />
             <main className="flex-grow">{children}</main>
-            <Footer />
+            <div className="mb-[-120px]">
+              <Footer />
+            </div>
           </div>
         </ThemeProvider>
         <Toaster />

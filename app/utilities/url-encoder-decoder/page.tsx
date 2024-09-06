@@ -41,8 +41,8 @@ export default function UrlEncoderDecoder() {
     });
   }, [output, toast]);
   return (
-    <div className="flex justify-center items-center min-h-screen">
-      <Card className="w-full max-w-lg p-4">
+    <div className="flex justify-center items-center">
+      <Card className="w-full max-w-lg">
         <CardHeader>
           <CardTitle>URL Encoder/Decoder</CardTitle>
           <CardDescription>

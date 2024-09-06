@@ -20,6 +20,7 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { links, utilities } from "@/utils/otherUtilities";
+import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -64,13 +65,27 @@ export default function OtherUtilities() {
   }, [router]);
 
   return (
-    <div className="flex flex-col items-center justify-center bg-background text-foreground">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+      className="flex flex-col items-center justify-center bg-background text-foreground"
+    >
       <div className="w-full max-w-4xl px-4">
-        <div className="flex flex-col justify-center items-center gap-3">
+        <motion.div
+          initial={{ y: -20 }}
+          animate={{ y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="flex flex-col justify-center items-center gap-3"
+        >
           <h1 className="text-4xl font-bold text-center mt-10 mb-6">
             Explore Utilities
           </h1>
-          <div className="mb-8">
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="mb-8"
+          >
             <Button
               onClick={() => setOpen(true)}
               className="w-[fit-content]"
@@ -83,69 +98,80 @@ export default function OtherUtilities() {
                 </kbd>
               </div>
             </Button>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {utilities.map((utility) => (
-            <Card
+          </motion.div>
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+        >
+          {utilities.map((utility, index) => (
+            <motion.div
               key={utility.title}
-              className="flex flex-col justify-between h-full"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: index * 0.1 }}
             >
-              <CardHeader>
-                <CardTitle className="text-lg">{utility.title}</CardTitle>
-                <CardDescription className="text-sm">
-                  {utility.description}
-                </CardDescription>
-              </CardHeader>
-              <CardFooter>
-                <Link href={utility.link} className="w-full">
-                  <Button variant="outline" className="w-full">
-                    Try it
-                  </Button>
-                </Link>
-              </CardFooter>
-            </Card>
+              <Card className="flex flex-col justify-between h-full">
+                <CardHeader>
+                  <CardTitle className="text-lg">{utility.title}</CardTitle>
+                  <CardDescription className="text-sm">
+                    {utility.description}
+                  </CardDescription>
+                </CardHeader>
+                <CardFooter>
+                  <Link href={utility.link} className="w-full">
+                    <Button variant="outline" className="w-full">
+                      Try it
+                    </Button>
+                  </Link>
+                </CardFooter>
+              </Card>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       </div>
-      <CommandDialog open={open} onOpenChange={setOpen}>
-        <Command className="rounded-lg border shadow-md">
-          <CommandInput placeholder="Type a command or search..." />
-          <CommandList>
-            <CommandEmpty>No results found.</CommandEmpty>
-            <CommandGroup heading="Utilities">
-              {utilities.map((utility) => (
-                <CommandItem
-                  key={utility.title}
-                  onSelect={() => {
-                    router.push(utility.link);
-                    setOpen(false);
-                  }}
-                >
-                  <span>{utility.title}</span>
-                  <CommandShortcut>{utility.shortcut}</CommandShortcut>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-            <CommandSeparator />
-            <CommandGroup heading="Links">
-              {links.map((link) => (
-                <CommandItem
-                  key={link.title}
-                  onSelect={() => {
-                    router.push(link.href);
-                    setOpen(false);
-                  }}
-                >
-                  <link.icon className="mr-2 h-4 w-4" />
-                  <span>{link.title}</span>
-                  <CommandShortcut>{link.shortcut}</CommandShortcut>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </CommandDialog>
-    </div>
+      <div className="hidden lg:block">
+        <CommandDialog open={open} onOpenChange={setOpen}>
+          <Command className="rounded-lg border shadow-md">
+            <CommandInput placeholder="Type a command or search..." />
+            <CommandList>
+              <CommandEmpty>No results found.</CommandEmpty>
+              <CommandGroup heading="Utilities">
+                {utilities.map((utility) => (
+                  <CommandItem
+                    key={utility.title}
+                    onSelect={() => {
+                      router.push(utility.link);
+                      setOpen(false);
+                    }}
+                  >
+                    <span>{utility.title}</span>
+                    <CommandShortcut>{utility.shortcut}</CommandShortcut>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+              <CommandSeparator />
+              <CommandGroup heading="Links">
+                {links.map((link) => (
+                  <CommandItem
+                    key={link.title}
+                    onSelect={() => {
+                      router.push(link.href);
+                      setOpen(false);
+                    }}
+                  >
+                    <link.icon className="mr-2 h-4 w-4" />
+                    <span>{link.title}</span>
+                    <CommandShortcut>{link.shortcut}</CommandShortcut>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </CommandDialog>
+      </div>
+    </motion.div>
   );
 }

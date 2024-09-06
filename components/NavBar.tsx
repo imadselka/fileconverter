@@ -54,7 +54,7 @@ const NavBar = () => {
         animate={isOpen ? { height: "auto" } : { height: 0 }}
         transition={{ duration: 0.3 }}
       >
-        <div className="text-sm flex flex-row justify-center items-center lg:flex-grow">
+        <div className="text-sm flex flex-col md:justify-center md:items-center md:flex-row lg:flex-grow">
           <Link href="/" passHref>
             <motion.div
               whileHover={{ scale: 1.05 }}

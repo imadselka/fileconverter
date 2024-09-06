@@ -21,7 +21,7 @@ const Content = () => {
           className="text-4xl md:text-6xl lg:text-7xl font-bold mb-4"
           initial={{ y: -20 }}
           animate={{ y: 0 }}
-          transition={{ delay: 0.2, type: "spring", stiffness: 120 }}
+          transition={{ delay: 0.2, type: "linear", stiffness: 120 }}
         >
           Free File Converter
         </motion.h1>

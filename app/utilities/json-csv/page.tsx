@@ -79,8 +79,8 @@ export default function CsvJsonConverter() {
   }, []);
 
   return (
-    <div className="flex justify-center items-center min-h-screen">
-      <Card className="w-full max-w-lg p-4">
+    <div className="flex justify-center items-center">
+      <Card className="w-full max-w-lg">
         <CardHeader>
           <CardTitle>CSV/JSON Converter</CardTitle>
           <CardDescription>
