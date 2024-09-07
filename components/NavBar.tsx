@@ -69,7 +69,7 @@ const NavBar = () => {
               </Button>
             </motion.div>
           </Link>
-          <Link href="/merge" passHref>
+          <Link href="/merge-files" passHref>
             <motion.div
               whileHover={{ scale: 1.05 }}
               className="block mt-4 lg:inline-block lg:mt-0 mr-4"

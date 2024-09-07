@@ -109,9 +109,9 @@ export default function OtherUtilities() {
           {utilities.map((utility, index) => (
             <motion.div
               key={utility.title}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: index * 0.1 }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 1.05 }}
+              className="cursor-auto"
             >
               <Card className="flex flex-col justify-between h-full">
                 <CardHeader>

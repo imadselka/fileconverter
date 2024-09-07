@@ -1,4 +1,5 @@
 import { Input } from "@/components/ui/input";
+import { motion } from "framer-motion";
 import { useRef, useState } from "react";
 import { BiCloudUpload } from "react-icons/bi";
 import AfterFileUploaded from "./AfterFileUploaded";
@@ -39,7 +40,10 @@ export const FileUpload = () => {
   };
 
   return (
-    <div className="relative flex items-center justify-center w-full px-4 md:px-0">
+    <motion.div
+      whileHover={{ scale: 1.05 }}
+      className="relative flex items-center justify-center w-full px-4 md:px-0"
+    >
       {!uploadedFile ? (
         <div
           className={`relative rounded-2xl bg-white/20 dark:bg-black/30 p-1 shadow-lg shadow-gray-500/20 dark:shadow-black/30 backdrop-blur-lg hover:cursor-pointer w-full max-w-md ${
@@ -75,6 +79,6 @@ export const FileUpload = () => {
         onChange={handleFileChange}
         className="hidden"
       />
-    </div>
+    </motion.div>
   );
 };

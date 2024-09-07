@@ -9,7 +9,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "TransformDocs",
+  title: "FileConverter",
   description: "Convert and merge your files easily to any format you want",
 };
 
@@ -27,12 +27,10 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <div className="flex flex-col">
+          <div className="flex flex-col min-h-screen">
             <NavBar />
             <main className="flex-grow">{children}</main>
-            <div className="mb-[-120px]">
-              <Footer />
-            </div>
+            <Footer />
           </div>
         </ThemeProvider>
         <Toaster />
