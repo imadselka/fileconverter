@@ -31,11 +31,10 @@ The File Converter is a web application that allows users to convert their files
 
 - **Frontend**: React, Next.js, Tailwind CSS
 - **Backend**: CloudConvert API
-- **Utilities**: Axios, Framer Motion, Radix UI, FFmpeg
 
 ## Idea Behind the Project
 
-I created the File Converter because I was frustrated with the existing file conversion websites. Most of them are either filled with annoying ads or require a paid subscription to access their services. I wanted a simple, ad-free solution that anyone could use without any hassle. By leveraging the CloudConvert API, this application can handle a wide range of file formats and provide a seamless user experience. The goal is to offer a quick and easy file conversion tool that is accessible to everyone, without the distractions and limitations of ads or paywalls.
+I created the File Converter because I was frustrated with the existing file conversion websites. Most of them are either filled with annoying ads or require a paid subscription to access their services. I wanted a simple, ad-free solution that anyone could use without any hassle. 
 
 ## Installation
 
