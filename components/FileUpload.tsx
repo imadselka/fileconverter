@@ -17,7 +17,7 @@ export const FileUpload = () => {
     const file = event.target.files?.[0];
     if (file) {
       setUploadedFile(file);
-      event.target.value = ""; // Clear the input field to allow the same file to be re-uploaded
+      event.target.value = "";
     }
   };
 
@@ -46,7 +46,7 @@ export const FileUpload = () => {
     >
       {!uploadedFile ? (
         <div
-          className={`relative rounded-2xl bg-white/20 dark:bg-black/30 p-1 shadow-lg shadow-gray-500/20 dark:shadow-black/30 backdrop-blur-lg hover:cursor-pointer w-full max-w-md ${
+          className={`relative rounded-2xl   p-1  hover:cursor-pointer w-full max-w-md ${
             isDragging ? "border-4 border-dashed border-blue-500" : ""
           }`}
           onClick={handleClick}
@@ -54,7 +54,7 @@ export const FileUpload = () => {
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <div className="relative flex flex-col items-center justify-center gap-6 rounded-2xl bg-gradient-to-br from-gray-200/60 to-gray-500/40 dark:from-gray-400/40 dark:to-gray-600/20 p-10 md:p-20">
+          <div className="relative flex flex-col items-center justify-center gap-6 rounded-2xl p-10 md:p-20">
             <BiCloudUpload
               size={100}
               className="text-gray-700 dark:text-gray-200"
