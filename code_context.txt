@@ -1,0 +1,4733 @@
+// File: lib/utils.ts
+import { type ClassValue, clsx } from "clsx"
+import { twMerge } from "tailwind-merge"
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+
+// File: components/AfterFileUploaded.tsx
+"use client";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/use-toast";
+import { getExtensionsByType } from "@/constants/fileExtensions";
+import { Action } from "@/types/Action";
+import bytesToSize from "@/utils/bytesToSize";
+import { convertDocument } from "@/utils/cloudConvertService";
+import compressFileName from "@/utils/compressFileName";
+import convertFile from "@/utils/convert";
+import fileToIcon from "@/utils/fileToIcon";
+import loadFfmpeg from "@/utils/loadffmpeg";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { useEffect, useRef, useState } from "react";
+import { BiError } from "react-icons/bi";
+import { FiUploadCloud } from "react-icons/fi";
+import { HiOutlineDownload } from "react-icons/hi";
+import { ImSpinner3 } from "react-icons/im";
+import { MdClose } from "react-icons/md";
+
+type AfterFileUploadType = {
+  fileUpload: File | null;
+  resetUpload: () => void;
+};
+
+const AfterFileUploaded = ({
+  fileUpload,
+  resetUpload,
+}: AfterFileUploadType) => {
+  const { toast } = useToast();
+  const [actions, setActions] = useState<Action[]>([]);
+  const [isReady, setIsReady] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
+  const [isDone, setIsDone] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const ffmpegRef = useRef<FFmpeg | null>(null);
+
+  useEffect(() => {
+    if (fileUpload) {
+      initializeAction(fileUpload);
+    }
+  }, [fileUpload]);
+
+  useEffect(() => {
+    const ready = actions.every((action) => action.to !== null);
+    setIsReady(ready);
+  }, [actions]);
+
+  useEffect(() => {
+    loadFfmpegInstance();
+  }, []);
+
+  const initializeAction = (file: File) => {
+    const action: Action = {
+      file_name: file.name,
+      file_size: file.size,
+      from: file.name.split(".").pop() || "",
+      to: "",
+      file_type: file.type,
+      file: file,
+      is_converted: false,
+      is_converting: false,
+      is_error: false,
+    };
+    setActions([action]);
+  };
+
+  const loadFfmpegInstance = async () => {
+    const ffmpegResponse: FFmpeg = await loadFfmpeg();
+    ffmpegRef.current = ffmpegResponse;
+    setIsLoaded(true);
+  };
+
+  const updateAction = (file_name: string, to: string) => {
+    setActions((prevActions) =>
+      prevActions.map((action) =>
+        action.file_name === file_name ? { ...action, to } : action
+      )
+    );
+  };
+
+  const deleteAction = (action: Action) => {
+    setActions((prevActions) =>
+      prevActions.filter((a) => a.file_name !== action.file_name)
+    );
+    if (actions.length <= 1) {
+      resetUpload();
+    }
+  };
+
+  const download = (action: Action) => {
+    if (!action.url || !action.output) {
+      console.error("Download failed: URL or output filename is missing");
+      return;
+    }
+    const a = document.createElement("a");
+    a.style.display = "none";
+    a.href = action.url;
+    a.download = action.output;
+    document.body.appendChild(a);
+    a.click();
+    URL.revokeObjectURL(action.url);
+    document.body.removeChild(a);
+  };
+
+  const convert = async () => {
+    if (actions.some((action) => !action.to)) {
+      toast({
+        variant: "destructive",
+        title: "Conversion Failed",
+        description: "Please select a conversion format for all files.",
+        duration: 5000,
+      });
+      return;
+    }
+
+    setIsConverting(true);
+    setErrorMessage(null);
+
+    const tmpActions = actions.map((action) => ({
+      ...action,
+      is_converting: true,
+    }));
+    setActions(tmpActions);
+
+    for (let action of tmpActions) {
+      try {
+        if (
+          ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "csv"].includes(
+            action.from
+          )
+        ) {
+          if (!action.file || !action.to) {
+            throw new Error("File or target format is missing");
+          }
+          const result = await convertDocument(action.file, action.to);
+          if (result && result.url && result.output) {
+            updateConvertedAction(action.file_name, result.url, result.output);
+          } else {
+            throw new Error("Invalid conversion result");
+          }
+        } else {
+          if (!ffmpegRef.current) {
+            throw new Error("FFmpeg is not initialized");
+          }
+          const { url, output } = await convertFile(ffmpegRef.current, action);
+          updateConvertedAction(action.file_name, url, output);
+        }
+      } catch (err) {
+        handleConversionError(
+          action.file_name,
+          err instanceof Error ? err.message : "An unknown error occurred"
+        );
+      }
+    }
+
+    setIsDone(true);
+    setIsConverting(false);
+  };
+
+  const updateConvertedAction = (
+    file_name: string,
+    url: string,
+    output: string
+  ) => {
+    setActions((prevActions) =>
+      prevActions.map((elt) =>
+        elt.file_name === file_name
+          ? {
+              ...elt,
+              is_converted: true,
+              is_converting: false,
+              url,
+              output,
+            }
+          : elt
+      )
+    );
+  };
+
+  const handleConversionError = (file_name: string, errorMessage: string) => {
+    setActions((prevActions) =>
+      prevActions.map((elt) =>
+        elt.file_name === file_name
+          ? {
+              ...elt,
+              is_converted: false,
+              is_converting: false,
+              is_error: true,
+            }
+          : elt
+      )
+    );
+    toast({
+      variant: "destructive",
+      title: "Conversion Failed",
+      description: `Failed to convert ${file_name}. ${errorMessage}`,
+      duration: 5000,
+    });
+    console.error(`Conversion error for ${file_name}: ${errorMessage}`);
+  };
+
+  return (
+    <div className="space-y-6">
+      {errorMessage && (
+        <div className="text-red-600 bg-red-100 p-4 rounded-lg mb-4">
+          {errorMessage}
+        </div>
+      )}
+      {actions.map((action, i) => (
+        <ActionCard
+          key={i}
+          action={action}
+          isLoaded={isLoaded}
+          isConverting={isConverting}
+          isDone={isDone}
+          updateAction={updateAction}
+          deleteAction={deleteAction}
+          convert={convert}
+          download={download}
+        />
+      ))}
+    </div>
+  );
+};
+
+const ActionCard = ({
+  action,
+  isLoaded,
+  isConverting,
+  isDone,
+  updateAction,
+  deleteAction,
+  convert,
+  download,
+}: {
+  action: Action;
+  isLoaded: boolean;
+  isConverting: boolean;
+  isDone: boolean;
+  updateAction: (file_name: string, to: string) => void;
+  deleteAction: (action: Action) => void;
+  convert: () => void;
+  download: (action: Action) => void;
+}) => {
+  return (
+    <div className="relative flex flex-wrap items-center justify-between w-full px-4 py-4 space-y-2 border cursor-pointer lg:py-0 rounded-xl h-fit lg:h-20 lg:px-10 lg:flex-nowrap">
+      {!isLoaded && (
+        <Skeleton className="absolute w-full h-full  cursor-progress rounded-xl" />
+      )}
+      <div className="flex flex-row justify-center items-center gap-4 w-full lg:w-auto">
+        <span className="text-2xl text-orange-800 dark:text-orange-400">
+          {fileToIcon(action.file_type)}
+        </span>
+        <div className="flex flex-row items-center gap-1 w-40 sm:w-60 md:w-96">
+          <span className="font-medium truncate w-full">
+            {compressFileName(action.file_name)}
+          </span>
+        </div>
+        <div className="flex justify-center items-center">
+          <Badge variant={"secondary"} className="m-2 h-10">
+            <span className="m-2">{bytesToSize(action.file_size)}</span>
+          </Badge>
+        </div>
+      </div>
+      <div className="flex items-center p-2 gap-6 lg:gap-20 w-full lg:w-auto">
+        <Select
+          disabled={
+            !isLoaded ||
+            action.is_converting ||
+            isConverting ||
+            action.is_converted
+          }
+          onValueChange={(to) => updateAction(action.file_name, to)}
+        >
+          <SelectTrigger className="w-full lg:w-[180px]">
+            <SelectValue placeholder="Format" className="w-full" />
+          </SelectTrigger>
+          <SelectContent>
+            {getExtensionsByType(action.file_type)
+              .filter((ext) => ext !== action.from)
+              .map((ext) => (
+                <SelectItem key={ext} value={ext}>
+                  {ext}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+        <div className="flex flex-col gap-4 md:flex-row lg:flex-row">
+          {!isConverting && !action.is_converted && (
+            <div className="flex flex-col gap-4 md:flex-row lg:flex-row">
+              <Button
+                variant="ghost"
+                disabled={isConverting}
+                onClick={convert}
+                className="flex items-center gap-1"
+              >
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold">Convert</span>
+                  <FiUploadCloud size={16} />
+                </div>
+              </Button>
+              <Button
+                variant="ghost"
+                className="p-2 rounded-lg w-full lg:w-auto"
+                onClick={() => deleteAction(action)}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="">Convert another file</span>
+                  <MdClose />
+                </div>
+              </Button>
+            </div>
+          )}
+        </div>
+        <div className="flex gap-2 lg:gap-6 w-full lg:w-auto">
+          {isConverting && !action.is_converted && (
+            <Button
+              disabled
+              className="p-2 text-xl text-blue-500 bg-blue-200 rounded-lg cursor-progress w-full lg:w-auto"
+            >
+              <ImSpinner3 className="animate-spin" />
+            </Button>
+          )}
+          {isDone && !action.is_error && action.is_converted && (
+            <div className="flex flex-col gap-4 md:flex-row lg:flex-row">
+              <Button
+                variant="ghost"
+                onClick={() => download(action)}
+                className="flex items-center gap-2 p-2 rounded-lg w-full lg:w-auto"
+              >
+                Download
+                <HiOutlineDownload />
+              </Button>
+
+              <Button
+                variant="ghost"
+                onClick={() => deleteAction(action)}
+                className="flex items-center gap-2 p-2 rounded-lg w-full lg:w-auto"
+              >
+                Convert another file
+              </Button>
+            </div>
+          )}
+          {isDone && action.is_error && (
+            <div className="flex flex-col gap-4 md:flex-row lg:flex-row">
+              <Button
+                type="button"
+                className="p-2 text-xl text-red-600 bg-red-300 hover:bg-red-200/50 rounded-lg w-full lg:w-auto"
+              >
+                <BiError />
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default AfterFileUploaded;
+
+// File: components/AnimatedBackground.tsx
+"use client";
+
+import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
+
+const PARTICLE_COUNT = 30;
+
+interface Particle {
+  id: number;
+  x: number;
+  y: number;
+  size: number;
+}
+
+export default function AnimatedBackground() {
+  const [particles, setParticles] = useState<Particle[]>([]);
+
+  useEffect(() => {
+    const newParticles = Array.from({ length: PARTICLE_COUNT }, (_, i) => ({
+      id: i,
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      size: Math.random() * 4 + 1,
+    }));
+    setParticles(newParticles);
+  }, []);
+
+  return (
+    <div className="fixed inset-0 overflow-hidden pointer-events-none">
+      {particles.map((particle) => (
+        <motion.div
+          key={particle.id}
+          className="absolute rounded-full bg-gray-200 opacity-20"
+          style={{
+            width: particle.size,
+            height: particle.size,
+            left: `${particle.x}%`,
+            top: `${particle.y}%`,
+          }}
+          animate={{
+            x: ["-50%", "50%", "-50%"],
+            y: ["-50%", "50%", "-50%"],
+          }}
+          transition={{
+            duration: Math.random() * 10 + 20,
+            repeat: Infinity,
+            ease: "easeIn",
+          }}
+          whileHover={{ scale: 1.05 }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// File: components/AnimatedBorder.tsx
+// components/AnimatedBorder.tsx
+"use client";
+
+import { motion } from "framer-motion";
+
+interface AnimatedBorderProps {
+  colors?: string[];
+  duration?: number;
+  borderWidth?: number;
+  borderRadius?: string;
+  className?: string;
+}
+
+const AnimatedBorder: React.FC<AnimatedBorderProps> = ({
+  colors = [
+    "rgba(255, 170, 64, 0.75)",
+    "rgba(156, 64, 255, 0.75)",
+    "rgba(255, 170, 64, 0.75)",
+    "rgba(156, 64, 255, 0.75)",
+    "rgba(255, 170, 64, 0.75)",
+  ],
+  duration = 5,
+  borderWidth = 2,
+  borderRadius = "1rem",
+  className = "",
+}) => {
+  return (
+    <motion.div
+      className={`absolute inset-0 ${className}`}
+      initial={{ borderColor: colors[0] }}
+      animate={{ borderColor: colors }}
+      transition={{
+        duration: duration,
+        ease: "linear",
+        repeat: Infinity,
+      }}
+      style={{
+        borderStyle: "solid",
+        borderWidth: `${borderWidth}px`,
+        borderRadius: borderRadius,
+      }}
+    />
+  );
+};
+
+export default AnimatedBorder;
+
+// File: components/BackToUtilitiesArrow.tsx
+import { Button } from "@/components/ui/button";
+import { motion } from "framer-motion";
+import { ArrowLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
+
+const BackToUtilitiesArrow = () => {
+  const router = useRouter();
+  return (
+    <div className="min-h-screen flex flex-col">
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="p-4"
+      >
+        <Button
+          variant="ghost"
+          onClick={() => router.push("/utilities")}
+          className="mb-4"
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Utilities
+        </Button>
+      </motion.div>
+    </div>
+  );
+};
+
+export default BackToUtilitiesArrow;
+
+// File: components/Beam.tsx
+import { useEffect, useRef } from "react";
+import { twMerge } from "tailwind-merge";
+import styles from "./styles.module.css";
+
+const Beam = ({ className }: any) => {
+  const meteorRef = useRef<any>(null);
+
+  useEffect(() => {
+    const meteor = meteorRef.current;
+
+    meteor.addEventListener("animationend", () => {
+      meteor.style.visibility = "hidden";
+      const animationDelay = Math.floor(Math.random() * (3 - 0) + 0);
+      const animationDuration = Math.floor(Math.random() * (4 - 0) + 0);
+      const meteorWidth = Math.floor(Math.random() * (100 - 20) + 20);
+      meteor.style.setProperty("--meteor-delay", `${animationDelay}s`);
+      meteor.style.setProperty("--meteor-duration", `${animationDuration}s`);
+      meteor.style.setProperty("--meteor-width", `${meteorWidth}px`);
+
+      restartAnimation();
+    });
+
+    meteor.addEventListener("animationstart", () => {
+      meteor.style.visibility = "visible";
+    });
+
+    return () => {
+      const meteor = meteorRef.current;
+      if (meteor) {
+        meteor.removeEventListener("animationend", () => {});
+        meteor.removeEventListener("animationstart", () => {});
+      }
+    };
+  }, []);
+  const restartAnimation = () => {
+    const meteor = meteorRef.current;
+    meteor.style.animation = "none";
+    void meteor.offsetWidth;
+    meteor.style.animation = null;
+  };
+
+  return (
+    <span
+      ref={meteorRef}
+      className={twMerge(
+        "absolute z-[40]    h-[0.1rem] w-[0.1rem] rounded-[9999px] bg-blue-700 shadow-[0_0_0_1px_#ffffff10] rotate-[180deg]",
+        styles.meteor,
+        className
+      )}
+    ></span>
+  );
+};
+
+export default Beam;
+
+// File: components/CombinedFiles.tsx
+const CombinedFiles = () => {
+  return (
+    <div className="flex flex-col">
+      <div>
+        {/* side bar menu where the user can customize the size of the images ect.. */}
+      </div>
+      <div>
+        {/* the main board where the user can drop or upload as many images he wants only: png, jpg, jpeg */}
+      </div>
+      <div></div>
+    </div>
+  );
+};
+
+export default CombinedFiles;
+
+// File: components/Content.tsx
+"use client";
+
+import { motion } from "framer-motion";
+import { FileUpload } from "./FileUpload";
+
+const Content = () => {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="flex flex-col gap-5 w-full max-w-4xl mx-auto px-4"
+    >
+      <motion.div
+        className="flex flex-col justify-center items-center text-center"
+        initial={{ scale: 0.9 }}
+        animate={{ scale: 1 }}
+        transition={{ duration: 0.5 }}
+      >
+        <motion.h1
+          className="text-4xl md:text-6xl lg:text-7xl font-bold mb-4"
+          initial={{ y: -20 }}
+          animate={{ y: 0 }}
+          transition={{ delay: 0.2, type: "linear", stiffness: 120 }}
+        >
+          Free File Converter
+        </motion.h1>
+        <motion.span
+          className="text-lg md:text-xl"
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.4 }}
+        >
+          Convert your files to any format you want, for free.
+        </motion.span>
+      </motion.div>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.6 }}
+      >
+        <FileUpload />
+      </motion.div>
+    </motion.div>
+  );
+};
+
+export default Content;
+
+// File: components/DocumentConverter.tsx
+"use client";
+
+import { Button } from "@/components/ui/button";
+import { useState } from "react";
+
+const DocumentConverter = () => {
+  const [file, setFile] = useState<File | null>(null);
+  const [outputFormat, setOutputFormat] = useState<string>("pdf");
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files[0]) {
+      setFile(files[0]);
+    }
+  };
+
+  const handleConvert = async () => {
+    if (!file) return;
+
+    const fileBuffer = await file.arrayBuffer();
+    const base64File = Buffer.from(fileBuffer).toString("base64");
+    const inputFormat = file.name.split(".").pop() || "";
+
+    const response = await fetch("/api/convert", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        file: base64File,
+        inputFormat,
+        outputFormat,
+      }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      setDownloadUrl(data.url);
+    } else {
+      console.error("Conversion error");
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <input type="file" onChange={handleFileChange} />
+      <select
+        value={outputFormat}
+        onChange={(e) => setOutputFormat(e.target.value)}
+      >
+        <option value="pdf">PDF</option>
+        <option value="docx">DOCX</option>
+        <option value="xlsx">XLSX</option>
+        {/* Add more formats as needed */}
+      </select>
+      <Button onClick={handleConvert}>Convert</Button>
+      {downloadUrl && (
+        <a href={downloadUrl} download>
+          Download Converted File
+        </a>
+      )}
+    </div>
+  );
+};
+
+export default DocumentConverter;
+
+// File: components/FileUpload.tsx
+import { Input } from "@/components/ui/input";
+import { motion } from "framer-motion";
+import { useRef, useState } from "react";
+import { BiCloudUpload } from "react-icons/bi";
+import AfterFileUploaded from "./AfterFileUploaded";
+
+export const FileUpload = () => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+
+  const handleClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setUploadedFile(file);
+      event.target.value = "";
+    }
+  };
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDragging(false);
+    const file = event.dataTransfer.files?.[0];
+    if (file) {
+      setUploadedFile(file);
+    }
+  };
+
+  return (
+    <motion.div
+      whileHover={{ scale: 1.05 }}
+      className="relative flex items-center justify-center w-full px-4 md:px-0"
+    >
+      {!uploadedFile ? (
+        <div
+          className={`relative rounded-2xl   p-1  hover:cursor-pointer w-full max-w-md ${
+            isDragging ? "border-4 border-dashed border-blue-500" : ""
+          }`}
+          onClick={handleClick}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <div className="relative flex flex-col items-center justify-center gap-6 rounded-2xl p-10 md:p-20">
+            <BiCloudUpload
+              size={100}
+              className="text-gray-700 dark:text-gray-200"
+            />
+            <h1 className="text-2xl font-semibold text-gray-800 dark:text-gray-200 text-center">
+              {isDragging
+                ? "Drop Here to Upload"
+                : "Click or Drop Your Files Here"}
+            </h1>
+          </div>
+        </div>
+      ) : (
+        <AfterFileUploaded
+          fileUpload={uploadedFile}
+          resetUpload={() => setUploadedFile(null)}
+        />
+      )}
+
+      <Input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        className="hidden"
+      />
+    </motion.div>
+  );
+};
+
+// File: components/Footer.tsx
+"use client";
+
+import { motion } from "framer-motion";
+import Link from "next/link";
+import { FaGithub, FaLinkedin, FaTwitter } from "react-icons/fa";
+
+const Footer = () => {
+  return (
+    <motion.footer
+      initial={{ opacity: 0, y: 50 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-6"
+    >
+      <div className="container mx-auto px-4">
+        <motion.div
+          className="flex flex-col justify-center items-center gap-2"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.2, duration: 0.3 }}
+        >
+          <div className="mt-4 text-center">
+            <motion.p className="text-sm" whileHover={{ scale: 1.05 }}>
+              Made with ❤️ by{" "}
+              <Link
+                href="https://linktr.ee/ImadSelka"
+                className="text-primary hover:underline"
+              >
+                Imad
+              </Link>
+            </motion.p>
+          </div>
+          <motion.div
+            className="flex items-center space-x-4"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4, duration: 0.3 }}
+          >
+            {[
+              {
+                href: "https://github.com/imadselka",
+                icon: FaGithub,
+                label: "GitHub",
+              },
+              {
+                href: "https://x.com/imad_selka",
+                icon: FaTwitter,
+                label: "Twitter",
+              },
+              {
+                href: "https://www.linkedin.com/in/imad-selka-120aa4251/",
+                icon: FaLinkedin,
+                label: "LinkedIn",
+              },
+            ].map((social, index) => (
+              <motion.div
+                key={social.label}
+                whileHover={{ scale: 1.2, rotate: 5 }}
+                whileTap={{ scale: 0.9 }}
+              >
+                <Link
+                  href={social.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <social.icon className="text-xl hover:text-primary transition-colors" />
+                  <span className="sr-only">{social.label}</span>
+                </Link>
+              </motion.div>
+            ))}
+          </motion.div>
+        </motion.div>
+      </div>
+    </motion.footer>
+  );
+};
+
+export default Footer;
+
+// File: components/JsonToYaml.tsx
+"use client";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
+import yaml from "js-yaml";
+import { useEffect, useState } from "react";
+
+export default function JsonToYaml() {
+  const [input, setInput] = useState("");
+  const [output, setOutput] = useState("");
+  const { toast } = useToast();
+
+  useEffect(() => {
+    try {
+      const obj = JSON.parse(input);
+      setOutput(yaml.dump(obj));
+    } catch (error) {
+      setOutput("Invalid JSON format");
+    }
+  }, [input]);
+
+  const copyContent = () => {
+    if (!output) return;
+    navigator.clipboard.writeText(output);
+    toast({
+      title: "Copied",
+      description: "Content copied to clipboard",
+      duration: 3000,
+    });
+  };
+
+  return (
+    <div className=" space-y-4">
+      <textarea
+        className="w-full h-40 p-2 border rounded"
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        placeholder="Paste your JSON here..."
+      />
+      <Button variant="outline" onClick={copyContent}>
+        Copy
+      </Button>
+      <pre className="w-full h-40 p-2 border rounded overflow-auto">
+        {output || "Your YAML output will appear here..."}
+      </pre>
+    </div>
+  );
+}
+
+// File: components/logo.tsx
+import { useTheme } from "next-themes";
+
+const Logo = ({ className = "", size = 32 }) => {
+  const { theme } = useTheme();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+    >
+      <rect width="32" height="32" rx="6" className="fill-primary" />
+      <path
+        d="M8 8L24 24M8 24L24 8"
+        className="stroke-primary-foreground"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M16 6V26M6 16H26"
+        className="stroke-primary-foreground"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+};
+
+export default Logo;
+
+// File: components/merge-files/FileList.tsx
+import { Button } from "@/components/ui/button";
+import { AnimatePresence, motion } from "framer-motion";
+import { FaFileAlt, FaFilePdf, FaFileWord, FaTrash } from "react-icons/fa";
+
+interface FileListProps {
+  files: File[];
+  onDelete: (index: number) => void;
+}
+
+export default function FileList({ files, onDelete }: FileListProps) {
+  const getFileIcon = (file: File) => {
+    switch (file.type) {
+      case "application/pdf":
+        return <FaFilePdf />;
+      case "application/msword":
+      case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        return <FaFileWord />;
+      default:
+        return <FaFileAlt />;
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
+
+  return (
+    <AnimatePresence>
+      {files.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.3 }}
+        >
+          <h2 className="text-xl font-semibold mb-2">Selected Files:</h2>
+          <ul className="space-y-2">
+            {files.map((file, index) => (
+              <motion.li
+                key={`${file.name}-${index}`}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ delay: index * 0.1 }}
+                className="flex items-center justify-between w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-2 rounded"
+              >
+                <div className="flex justify-center items-center space-x-2 w-full flex-grow">
+                  {getFileIcon(file)}
+                  <span className="truncate flex-grow">{file.name}</span>
+                </div>
+                <div className="flex justify-center items-center space-x-2">
+                  <span className="flex-row text-sm text-muted-foreground">
+                    {formatFileSize(file.size)}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onDelete(index)}
+                    className="text-destructive hover:text-destructive/90"
+                  >
+                    <FaTrash />
+                  </Button>
+                </div>
+              </motion.li>
+            ))}
+          </ul>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// File: components/merge-files/FileUploader.tsx
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { motion } from "framer-motion";
+import { FaFileUpload } from "react-icons/fa";
+
+interface FileUploaderProps {
+  onFileChange: (files: File[]) => void;
+}
+
+export default function FileUploader({ onFileChange }: FileUploaderProps) {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      onFileChange(Array.from(e.target.files));
+    }
+  };
+
+  return (
+    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+      <Label
+        htmlFor="file-upload"
+        className="cursor-pointer bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-2 px-4 rounded inline-flex items-center w-full justify-center"
+      >
+        <FaFileUpload className="mr-2" />
+        <span>Choose files to merge</span>
+      </Label>
+      <Input
+        id="file-upload"
+        type="file"
+        multiple
+        onChange={handleFileChange}
+        className="hidden"
+        accept=".pdf,.doc,.docx,.txt"
+      />
+    </motion.div>
+  );
+}
+
+// File: components/merge-files/FormatSelector.tsx
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+interface FormatSelectorProps {
+  value: string;
+  onChange: (value: string) => void;
+}
+
+export default function FormatSelector({
+  value,
+  onChange,
+}: FormatSelectorProps) {
+  return (
+    <Select onValueChange={onChange} value={value}>
+      <SelectTrigger>
+        <SelectValue placeholder="Select output format" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="pdf">PDF</SelectItem>
+        <SelectItem value="docx">DOCX</SelectItem>
+        <SelectItem value="txt">DOC</SelectItem>
+        <SelectItem value="txt">TXT</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
+// File: components/merge-files/MergeButton.tsx
+import { Button } from "@/components/ui/button";
+import { motion } from "framer-motion";
+
+interface MergeButtonProps {
+  onClick: () => void;
+  disabled: boolean;
+  isMerging: boolean;
+}
+
+export default function MergeButton({
+  onClick,
+  disabled,
+  isMerging,
+}: MergeButtonProps) {
+  return (
+    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+      <Button
+        onClick={onClick}
+        className="w-full"
+        variant="outline"
+        disabled={disabled}
+      >
+        {isMerging ? "Merging Files..." : "Merge and Download"}
+      </Button>
+    </motion.div>
+  );
+}
+
+// File: components/ModeToggle.tsx
+"use client";
+import { Button } from "@/components/ui/button";
+import { MoonIcon, SunIcon } from "@radix-ui/react-icons";
+import { useTheme } from "next-themes";
+
+export function ModeToggle() {
+  const { theme, setTheme } = useTheme();
+
+  return (
+    <Button
+      variant="ghost"
+      onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+    >
+      <SunIcon className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+      <MoonIcon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+    </Button>
+  );
+}
+
+// File: components/NavBar.tsx
+"use client";
+
+import { motion } from "framer-motion";
+import { FilesIcon } from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
+import { FaTools } from "react-icons/fa";
+import { IoIosGitMerge } from "react-icons/io";
+import Logo from "./logo";
+import { ModeToggle } from "./ModeToggle";
+import { Button } from "./ui/button";
+
+const NavBar = () => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <motion.nav
+      initial={{ y: -100 }}
+      animate={{ y: 0 }}
+      transition={{ type: "spring", stiffness: 120 }}
+      className="flex flex-wrap justify-between items-center w-full px-4 py-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
+    >
+      <Link
+        href="https://github.com/imadselka/fileconverter"
+        className="flex items-center space-x-2"
+      >
+        <motion.div whileHover={{ scale: 1.1 }} className="flex items-center">
+          <Logo />
+          <span className="ml-2 text-2xl font-bold">FileConverter</span>
+        </motion.div>
+      </Link>
+
+      <div className="block lg:hidden">
+        <Button variant="ghost" onClick={() => setIsOpen(!isOpen)}>
+          <svg
+            className="w-6 h-6"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 6h16M4 12h16M4 18h16"
+            />
+          </svg>
+        </Button>
+      </div>
+
+      <motion.div
+        className={`w-full lg:flex lg:items-center lg:w-auto ${
+          isOpen ? "block" : "hidden"
+        }`}
+        initial={false}
+        animate={isOpen ? { height: "auto" } : { height: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <div className="text-sm flex flex-col md:justify-center md:items-center md:flex-row lg:flex-grow">
+          <Link href="/" passHref>
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              className="block mt-4 lg:inline-block lg:mt-0 mr-4"
+            >
+              <Button variant="ghost" className="gap-2">
+                <FilesIcon />
+                Convert Files
+              </Button>
+            </motion.div>
+          </Link>
+          <Link href="/merge-files" passHref>
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              className="block mt-4 lg:inline-block lg:mt-0 mr-4"
+            >
+              <Button variant="ghost" className="gap-2">
+                <IoIosGitMerge />
+                Merge Files
+              </Button>
+            </motion.div>
+          </Link>
+          <Link href="/utilities" passHref>
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              className="block mt-4 lg:inline-block lg:mt-0 mr-4"
+            >
+              <Button variant="ghost" className="gap-2">
+                <FaTools />
+                Other Utilities
+              </Button>
+            </motion.div>
+          </Link>
+        </div>
+        <div>
+          <ModeToggle />
+        </div>
+      </motion.div>
+    </motion.nav>
+  );
+};
+
+export default NavBar;
+
+// File: components/OtherUtilities.tsx
+"use client";
+
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+  CommandShortcut,
+} from "@/components/ui/command";
+import { links, utilities } from "@/utils/otherUtilities";
+import { motion } from "framer-motion";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+
+export default function OtherUtilities() {
+  const [open, setOpen] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setOpen((open) => !open);
+      }
+    };
+
+    document.addEventListener("keydown", down);
+    return () => document.removeEventListener("keydown", down);
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey) {
+        const key = e.key.toLowerCase();
+        const utility = utilities.find((u) =>
+          u.shortcut.toLowerCase().endsWith(key)
+        );
+        const link = links.find((l) => l.shortcut.toLowerCase().endsWith(key));
+
+        if (utility) {
+          e.preventDefault();
+          router.push(utility.link);
+        } else if (link) {
+          e.preventDefault();
+          router.push(link.href);
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [router]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+      className="flex flex-col items-center justify-center bg-background text-foreground"
+    >
+      <div className="w-full max-w-4xl px-4">
+        <motion.div
+          initial={{ y: -20 }}
+          animate={{ y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="flex flex-col justify-center items-center gap-3"
+        >
+          <h1 className="text-4xl font-bold text-center mt-10 mb-6">
+            Explore Utilities
+          </h1>
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="mb-8"
+          >
+            <Button
+              onClick={() => setOpen(true)}
+              className="w-[fit-content]"
+              variant="outline"
+            >
+              <div className="flex flex-row justify-center items-center md:gap-[15rem]">
+                <span className="mr-2">Search</span>
+                <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                  <span className="text-xs">⌘</span>K
+                </kbd>
+              </div>
+            </Button>
+          </motion.div>
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+        >
+          {utilities.map((utility, index) => (
+            <motion.div
+              key={utility.title}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 1.05 }}
+              className="cursor-auto"
+            >
+              <Card className="flex flex-col justify-between h-full">
+                <CardHeader>
+                  <CardTitle className="text-lg">{utility.title}</CardTitle>
+                  <CardDescription className="text-sm">
+                    {utility.description}
+                  </CardDescription>
+                </CardHeader>
+                <CardFooter>
+                  <Link href={utility.link} className="w-full">
+                    <Button variant="outline" className="w-full">
+                      Try it
+                    </Button>
+                  </Link>
+                </CardFooter>
+              </Card>
+            </motion.div>
+          ))}
+        </motion.div>
+      </div>
+      <div className="hidden lg:block">
+        <CommandDialog open={open} onOpenChange={setOpen}>
+          <Command className="rounded-lg border shadow-md">
+            <CommandInput placeholder="Type a command or search..." />
+            <CommandList>
+              <CommandEmpty>No results found.</CommandEmpty>
+              <CommandGroup heading="Utilities">
+                {utilities.map((utility) => (
+                  <CommandItem
+                    key={utility.title}
+                    onSelect={() => {
+                      router.push(utility.link);
+                      setOpen(false);
+                    }}
+                  >
+                    <span>{utility.title}</span>
+                    <CommandShortcut>{utility.shortcut}</CommandShortcut>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+              <CommandSeparator />
+              <CommandGroup heading="Links">
+                {links.map((link) => (
+                  <CommandItem
+                    key={link.title}
+                    onSelect={() => {
+                      router.push(link.href);
+                      setOpen(false);
+                    }}
+                  >
+                    <link.icon className="mr-2 h-4 w-4" />
+                    <span>{link.title}</span>
+                    <CommandShortcut>{link.shortcut}</CommandShortcut>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </CommandDialog>
+      </div>
+    </motion.div>
+  );
+}
+
+// File: components/progress.tsx
+"use client";
+
+import * as ProgressPrimitive from "@radix-ui/react-progress";
+import { motion } from "framer-motion"; // Import framer-motion for animation
+import * as React from "react";
+
+import { cn } from "@/lib/utils";
+
+const Progress = React.forwardRef<
+  React.ElementRef<typeof ProgressPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof ProgressPrimitive.Root>
+>(({ className, value, ...props }, ref) => (
+  <ProgressPrimitive.Root
+    ref={ref}
+    className={cn(
+      "relative h-4 w-full overflow-hidden rounded-full bg-secondary",
+      className
+    )}
+    {...props}
+  >
+    {/* Use Framer Motion to animate the progress */}
+    <motion.div
+      className="h-full bg-primary"
+      initial={{ width: 0 }}
+      animate={{ width: `${value || 0}%` }}
+      transition={{ duration: 0.5, ease: "easeInOut" }} // Customize animation
+    />
+  </ProgressPrimitive.Root>
+));
+Progress.displayName = ProgressPrimitive.Root.displayName;
+
+export { Progress };
+
+// File: components/RegexBuilder.tsx
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/components/ui/use-toast";
+
+interface Props {
+  regexParts: string[];
+  setRegexParts: (parts: string[]) => void;
+  customInput: string;
+  setCustomInput: (input: string) => void;
+  flags: string;
+  setFlags: (flags: string) => void;
+  copyRegex: () => void;
+}
+
+const RegexBuilder: React.FC<Props> = ({
+  regexParts,
+  setRegexParts,
+  customInput,
+  setCustomInput,
+  flags,
+  setFlags,
+  copyRegex,
+}) => {
+  const { toast } = useToast();
+
+  const addRegexPart = (part: string) => {
+    setRegexParts([...regexParts, part]);
+  };
+
+  const addCustomPart = () => {
+    if (customInput) {
+      addRegexPart(customInput);
+      setCustomInput("");
+    }
+  };
+
+  const removeLastPart = () => {
+    setRegexParts(regexParts.slice(0, -1));
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2 justify-center">
+        {[
+          { label: "Any character", value: "." },
+          { label: "Digit", value: "\\d" },
+          { label: "Word character", value: "\\w" },
+          { label: "Whitespace", value: "\\s" },
+          { label: "Start of string", value: "^" },
+          { label: "End of string", value: "$" },
+          { label: "Zero or more", value: "*" },
+          { label: "One or more", value: "+" },
+          { label: "Zero or one", value: "?" },
+          { label: "Or", value: "|" },
+          { label: "Group", value: "()" },
+          { label: "Character set", value: "[]" },
+        ].map((component) => (
+          <Button
+            key={component.value}
+            variant="outline"
+            onClick={() => addRegexPart(component.value)}
+          >
+            {component.label}
+          </Button>
+        ))}
+      </div>
+      <div className="flex space-x-2 justify-center">
+        <Input
+          value={customInput}
+          onChange={(e) => setCustomInput(e.target.value)}
+          placeholder="Custom regex part"
+          className="max-w-xs"
+        />
+        <Button onClick={addCustomPart}>Add Custom</Button>
+      </div>
+      <div className="flex items-center space-x-2 justify-center">
+        <Label htmlFor="flags">Flags:</Label>
+        <Input
+          id="flags"
+          value={flags}
+          onChange={(e) => setFlags(e.target.value)}
+          className="w-20"
+        />
+      </div>
+      <div className="flex flex-wrap gap-2 justify-center">
+        {regexParts.map((part, index) => (
+          <Badge key={index} variant="secondary">
+            {part}
+          </Badge>
+        ))}
+      </div>
+      <div className="flex justify-between">
+        <Button variant="outline" onClick={removeLastPart}>
+          Remove Last
+        </Button>
+        <Button onClick={copyRegex}>Copy</Button>
+      </div>
+    </div>
+  );
+};
+
+export default RegexBuilder;
+
+// File: components/RegexTester.tsx
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+
+interface Props {
+  regexPattern: string;
+  setRegexPattern: (input: string) => void;
+  testString: string;
+  setTestString: (input: string) => void;
+  matchOutput: string;
+}
+
+const RegexTester: React.FC<Props> = ({
+  regexPattern,
+  setRegexPattern,
+  testString,
+  setTestString,
+  matchOutput,
+}) => {
+  return (
+    <div className="">
+      <div>
+        <Label htmlFor="regex-pattern">Regex Pattern</Label>
+        <Textarea
+          id="regex-pattern"
+          value={regexPattern}
+          onChange={(e) => setRegexPattern(e.target.value)}
+          placeholder="Enter regex pattern here (e.g., /pattern/g)"
+          className="min-h-[50px]"
+        />
+      </div>
+      <div>
+        <Label htmlFor="test-string">Test String</Label>
+        <Textarea
+          id="test-string"
+          value={testString}
+          onChange={(e) => setTestString(e.target.value)}
+          placeholder="Enter test string here..."
+          className="min-h-[80px]"
+        />
+      </div>
+      <div>
+        <Label htmlFor="match-output">Result</Label>
+        <Textarea
+          id="match-output"
+          readOnly
+          value={matchOutput}
+          className="min-h-[50px]"
+          placeholder="Matches will appear here..."
+        />
+      </div>
+    </div>
+  );
+};
+
+export default RegexTester;
+
+// File: components/theme-provider.tsx
+"use client";
+
+import { ThemeProvider as NextThemesProvider } from "next-themes";
+import { type ThemeProviderProps } from "next-themes/dist/types";
+
+export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
+  return <NextThemesProvider {...props}>{children}</NextThemesProvider>;
+}
+
+// File: components/ui/badge.tsx
+import * as React from "react"
+import { cva, type VariantProps } from "class-variance-authority"
+
+import { cn } from "@/lib/utils"
+
+const badgeVariants = cva(
+  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  {
+    variants: {
+      variant: {
+        default:
+          "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
+        secondary:
+          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        destructive:
+          "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
+        outline: "text-foreground",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
+
+export interface BadgeProps
+  extends React.HTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof badgeVariants> {}
+
+function Badge({ className, variant, ...props }: BadgeProps) {
+  return (
+    <div className={cn(badgeVariants({ variant }), className)} {...props} />
+  )
+}
+
+export { Badge, badgeVariants }
+
+// File: components/ui/border-beam.tsx
+import { motion } from "framer-motion";
+
+interface BorderBeamProps {
+  className?: string;
+  size?: number;
+  duration?: number;
+  borderWidth?: number;
+  colorFrom?: string;
+  colorTo?: string;
+  delay?: number;
+}
+
+export const BorderBeam = ({
+  className,
+  size = 200,
+  duration = 10,
+  borderWidth = 2,
+  colorFrom = "#ffaa40",
+  colorTo = "#9c40ff",
+  delay = 0,
+}: BorderBeamProps) => {
+  return (
+    <div
+      className={`relative flex items-center justify-center overflow-hidden rounded-lg ${className}`}
+      style={{
+        width: `${size}px`,
+        height: `${size}px`,
+        borderWidth: `${borderWidth}px`,
+      }}
+    >
+      <motion.div
+        className="absolute top-0 left-0 w-full h-full rounded-[inherit] pointer-events-none"
+        style={{
+          borderWidth: `${borderWidth}px`,
+          borderStyle: "solid",
+          borderImage: `linear-gradient(to right, ${colorFrom}, ${colorTo}) 1`,
+        }}
+        initial={{ clipPath: "inset(0% 0% 100% 0%)" }}
+        animate={{
+          clipPath: [
+            "inset(0% 0% 100% 0%)",
+            "inset(0% 0% 0% 0%)",
+            "inset(100% 0% 0% 0%)",
+            "inset(100% 0% 0% 100%)",
+            "inset(0% 0% 100% 100%)",
+          ],
+        }}
+        transition={{
+          duration: duration,
+          ease: "linear",
+          repeat: Infinity,
+          repeatDelay: delay,
+        }}
+      />
+    </div>
+  );
+};
+
+// File: components/ui/button.tsx
+import * as React from "react"
+import { Slot } from "@radix-ui/react-slot"
+import { cva, type VariantProps } from "class-variance-authority"
+
+import { cn } from "@/lib/utils"
+
+const buttonVariants = cva(
+  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        destructive:
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline:
+          "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+        secondary:
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+      size: {
+        default: "h-10 px-4 py-2",
+        sm: "h-9 rounded-md px-3",
+        lg: "h-11 rounded-md px-8",
+        icon: "h-10 w-10",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+)
+
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean
+}
+
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button"
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
+    )
+  }
+)
+Button.displayName = "Button"
+
+export { Button, buttonVariants }
+
+// File: components/ui/card.tsx
+import * as React from "react"
+
+import { cn } from "@/lib/utils"
+
+const Card = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn(
+      "rounded-lg border bg-card text-card-foreground shadow-sm",
+      className
+    )}
+    {...props}
+  />
+))
+Card.displayName = "Card"
+
+const CardHeader = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex flex-col space-y-1.5 p-6", className)}
+    {...props}
+  />
+))
+CardHeader.displayName = "CardHeader"
+
+const CardTitle = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLHeadingElement>
+>(({ className, ...props }, ref) => (
+  <h3
+    ref={ref}
+    className={cn(
+      "text-2xl font-semibold leading-none tracking-tight",
+      className
+    )}
+    {...props}
+  />
+))
+CardTitle.displayName = "CardTitle"
+
+const CardDescription = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLParagraphElement>
+>(({ className, ...props }, ref) => (
+  <p
+    ref={ref}
+    className={cn("text-sm text-muted-foreground", className)}
+    {...props}
+  />
+))
+CardDescription.displayName = "CardDescription"
+
+const CardContent = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
+))
+CardContent.displayName = "CardContent"
+
+const CardFooter = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex items-center p-6 pt-0", className)}
+    {...props}
+  />
+))
+CardFooter.displayName = "CardFooter"
+
+export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
+
+// File: components/ui/command.tsx
+"use client";
+
+import { type DialogProps } from "@radix-ui/react-dialog";
+import { Command as CommandPrimitive } from "cmdk";
+import { Search } from "lucide-react";
+import * as React from "react";
+
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+
+const Command = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive>
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive
+    ref={ref}
+    className={cn(
+      "flex h-full w-full flex-col overflow-visible rounded-md bg-popover text-popover-foreground",
+      className
+    )}
+    {...props}
+  />
+));
+Command.displayName = CommandPrimitive.displayName;
+
+interface CommandDialogProps extends DialogProps {}
+
+const CommandDialog = ({ children, ...props }: CommandDialogProps) => {
+  return (
+    <Dialog {...props}>
+      <DialogContent className="overflow-visible p-0 shadow-lg">
+        <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
+          {children}
+        </Command>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const CommandInput = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.Input>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input>
+>(({ className, ...props }, ref) => (
+  <div className="flex items-center border-b px-3" cmdk-input-wrapper="">
+    <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+    <CommandPrimitive.Input
+      ref={ref}
+      className={cn(
+        "flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
+        className
+      )}
+      {...props}
+    />
+  </div>
+));
+
+CommandInput.displayName = CommandPrimitive.Input.displayName;
+
+const CommandList = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.List>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.List>
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive.List
+    ref={ref}
+    className={cn("max-h-[300px] overflow-y-auto overflow-x-hidden", className)}
+    {...props}
+  />
+));
+
+CommandList.displayName = CommandPrimitive.List.displayName;
+
+const CommandEmpty = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.Empty>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Empty>
+>((props, ref) => (
+  <CommandPrimitive.Empty
+    ref={ref}
+    className="py-6 text-center text-sm"
+    {...props}
+  />
+));
+
+CommandEmpty.displayName = CommandPrimitive.Empty.displayName;
+
+const CommandGroup = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.Group>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Group>
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive.Group
+    ref={ref}
+    className={cn(
+      "overflow-hidden p-1 text-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground",
+      className
+    )}
+    {...props}
+  />
+));
+
+CommandGroup.displayName = CommandPrimitive.Group.displayName;
+
+const CommandSeparator = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.Separator>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Separator>
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive.Separator
+    ref={ref}
+    className={cn("-mx-1 h-px bg-border", className)}
+    {...props}
+  />
+));
+CommandSeparator.displayName = CommandPrimitive.Separator.displayName;
+
+const CommandItem = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.Item>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive.Item
+    ref={ref}
+    className={cn(
+      "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[disabled=true]:pointer-events-none data-[selected='true']:bg-accent data-[selected=true]:text-accent-foreground data-[disabled=true]:opacity-50",
+      className
+    )}
+    {...props}
+  />
+));
+
+CommandItem.displayName = CommandPrimitive.Item.displayName;
+
+const CommandShortcut = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLSpanElement>) => {
+  return (
+    <span
+      className={cn(
+        "ml-auto text-xs tracking-widest text-muted-foreground",
+        className
+      )}
+      {...props}
+    />
+  );
+};
+CommandShortcut.displayName = "CommandShortcut";
+
+export {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+  CommandShortcut,
+};
+
+// File: components/ui/dialog.tsx
+"use client"
+
+import * as React from "react"
+import * as DialogPrimitive from "@radix-ui/react-dialog"
+import { X } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+
+const Dialog = DialogPrimitive.Root
+
+const DialogTrigger = DialogPrimitive.Trigger
+
+const DialogPortal = DialogPrimitive.Portal
+
+const DialogClose = DialogPrimitive.Close
+
+const DialogOverlay = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Overlay>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Overlay
+    ref={ref}
+    className={cn(
+      "fixed inset-0 z-50 bg-black/80  data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      className
+    )}
+    {...props}
+  />
+))
+DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
+
+const DialogContent = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
+>(({ className, children, ...props }, ref) => (
+  <DialogPortal>
+    <DialogOverlay />
+    <DialogPrimitive.Content
+      ref={ref}
+      className={cn(
+        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+        className
+      )}
+      {...props}
+    >
+      {children}
+      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+        <X className="h-4 w-4" />
+        <span className="sr-only">Close</span>
+      </DialogPrimitive.Close>
+    </DialogPrimitive.Content>
+  </DialogPortal>
+))
+DialogContent.displayName = DialogPrimitive.Content.displayName
+
+const DialogHeader = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+  <div
+    className={cn(
+      "flex flex-col space-y-1.5 text-center sm:text-left",
+      className
+    )}
+    {...props}
+  />
+)
+DialogHeader.displayName = "DialogHeader"
+
+const DialogFooter = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+  <div
+    className={cn(
+      "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2",
+      className
+    )}
+    {...props}
+  />
+)
+DialogFooter.displayName = "DialogFooter"
+
+const DialogTitle = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Title>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Title
+    ref={ref}
+    className={cn(
+      "text-lg font-semibold leading-none tracking-tight",
+      className
+    )}
+    {...props}
+  />
+))
+DialogTitle.displayName = DialogPrimitive.Title.displayName
+
+const DialogDescription = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Description>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Description
+    ref={ref}
+    className={cn("text-sm text-muted-foreground", className)}
+    {...props}
+  />
+))
+DialogDescription.displayName = DialogPrimitive.Description.displayName
+
+export {
+  Dialog,
+  DialogPortal,
+  DialogOverlay,
+  DialogClose,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+}
+
+// File: components/ui/dropdown-menu.tsx
+"use client"
+
+import * as React from "react"
+import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
+import { Check, ChevronRight, Circle } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+
+const DropdownMenu = DropdownMenuPrimitive.Root
+
+const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger
+
+const DropdownMenuGroup = DropdownMenuPrimitive.Group
+
+const DropdownMenuPortal = DropdownMenuPrimitive.Portal
+
+const DropdownMenuSub = DropdownMenuPrimitive.Sub
+
+const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup
+
+const DropdownMenuSubTrigger = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.SubTrigger>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger> & {
+    inset?: boolean
+  }
+>(({ className, inset, children, ...props }, ref) => (
+  <DropdownMenuPrimitive.SubTrigger
+    ref={ref}
+    className={cn(
+      "flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent data-[state=open]:bg-accent",
+      inset && "pl-8",
+      className
+    )}
+    {...props}
+  >
+    {children}
+    <ChevronRight className="ml-auto h-4 w-4" />
+  </DropdownMenuPrimitive.SubTrigger>
+))
+DropdownMenuSubTrigger.displayName =
+  DropdownMenuPrimitive.SubTrigger.displayName
+
+const DropdownMenuSubContent = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.SubContent>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>
+>(({ className, ...props }, ref) => (
+  <DropdownMenuPrimitive.SubContent
+    ref={ref}
+    className={cn(
+      "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+      className
+    )}
+    {...props}
+  />
+))
+DropdownMenuSubContent.displayName =
+  DropdownMenuPrimitive.SubContent.displayName
+
+const DropdownMenuContent = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
+>(({ className, sideOffset = 4, ...props }, ref) => (
+  <DropdownMenuPrimitive.Portal>
+    <DropdownMenuPrimitive.Content
+      ref={ref}
+      sideOffset={sideOffset}
+      className={cn(
+        "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+        className
+      )}
+      {...props}
+    />
+  </DropdownMenuPrimitive.Portal>
+))
+DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName
+
+const DropdownMenuItem = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Item>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & {
+    inset?: boolean
+  }
+>(({ className, inset, ...props }, ref) => (
+  <DropdownMenuPrimitive.Item
+    ref={ref}
+    className={cn(
+      "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      inset && "pl-8",
+      className
+    )}
+    {...props}
+  />
+))
+DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName
+
+const DropdownMenuCheckboxItem = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.CheckboxItem>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.CheckboxItem>
+>(({ className, children, checked, ...props }, ref) => (
+  <DropdownMenuPrimitive.CheckboxItem
+    ref={ref}
+    className={cn(
+      "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      className
+    )}
+    checked={checked}
+    {...props}
+  >
+    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+      <DropdownMenuPrimitive.ItemIndicator>
+        <Check className="h-4 w-4" />
+      </DropdownMenuPrimitive.ItemIndicator>
+    </span>
+    {children}
+  </DropdownMenuPrimitive.CheckboxItem>
+))
+DropdownMenuCheckboxItem.displayName =
+  DropdownMenuPrimitive.CheckboxItem.displayName
+
+const DropdownMenuRadioItem = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.RadioItem>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.RadioItem>
+>(({ className, children, ...props }, ref) => (
+  <DropdownMenuPrimitive.RadioItem
+    ref={ref}
+    className={cn(
+      "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      className
+    )}
+    {...props}
+  >
+    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+      <DropdownMenuPrimitive.ItemIndicator>
+        <Circle className="h-2 w-2 fill-current" />
+      </DropdownMenuPrimitive.ItemIndicator>
+    </span>
+    {children}
+  </DropdownMenuPrimitive.RadioItem>
+))
+DropdownMenuRadioItem.displayName = DropdownMenuPrimitive.RadioItem.displayName
+
+const DropdownMenuLabel = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Label>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Label> & {
+    inset?: boolean
+  }
+>(({ className, inset, ...props }, ref) => (
+  <DropdownMenuPrimitive.Label
+    ref={ref}
+    className={cn(
+      "px-2 py-1.5 text-sm font-semibold",
+      inset && "pl-8",
+      className
+    )}
+    {...props}
+  />
+))
+DropdownMenuLabel.displayName = DropdownMenuPrimitive.Label.displayName
+
+const DropdownMenuSeparator = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Separator>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator>
+>(({ className, ...props }, ref) => (
+  <DropdownMenuPrimitive.Separator
+    ref={ref}
+    className={cn("-mx-1 my-1 h-px bg-muted", className)}
+    {...props}
+  />
+))
+DropdownMenuSeparator.displayName = DropdownMenuPrimitive.Separator.displayName
+
+const DropdownMenuShortcut = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLSpanElement>) => {
+  return (
+    <span
+      className={cn("ml-auto text-xs tracking-widest opacity-60", className)}
+      {...props}
+    />
+  )
+}
+DropdownMenuShortcut.displayName = "DropdownMenuShortcut"
+
+export {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuCheckboxItem,
+  DropdownMenuRadioItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuGroup,
+  DropdownMenuPortal,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuRadioGroup,
+}
+
+// File: components/ui/input.tsx
+import * as React from "react"
+
+import { cn } from "@/lib/utils"
+
+export interface InputProps
+  extends React.InputHTMLAttributes<HTMLInputElement> {}
+
+const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ className, type, ...props }, ref) => {
+    return (
+      <input
+        type={type}
+        className={cn(
+          "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+          className
+        )}
+        ref={ref}
+        {...props}
+      />
+    )
+  }
+)
+Input.displayName = "Input"
+
+export { Input }
+
+// File: components/ui/label.tsx
+"use client"
+
+import * as React from "react"
+import * as LabelPrimitive from "@radix-ui/react-label"
+import { cva, type VariantProps } from "class-variance-authority"
+
+import { cn } from "@/lib/utils"
+
+const labelVariants = cva(
+  "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+)
+
+const Label = React.forwardRef<
+  React.ElementRef<typeof LabelPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root> &
+    VariantProps<typeof labelVariants>
+>(({ className, ...props }, ref) => (
+  <LabelPrimitive.Root
+    ref={ref}
+    className={cn(labelVariants(), className)}
+    {...props}
+  />
+))
+Label.displayName = LabelPrimitive.Root.displayName
+
+export { Label }
+
+// File: components/ui/select.tsx
+"use client"
+
+import * as React from "react"
+import * as SelectPrimitive from "@radix-ui/react-select"
+import { Check, ChevronDown, ChevronUp } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+
+const Select = SelectPrimitive.Root
+
+const SelectGroup = SelectPrimitive.Group
+
+const SelectValue = SelectPrimitive.Value
+
+const SelectTrigger = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
+>(({ className, children, ...props }, ref) => (
+  <SelectPrimitive.Trigger
+    ref={ref}
+    className={cn(
+      "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
+      className
+    )}
+    {...props}
+  >
+    {children}
+    <SelectPrimitive.Icon asChild>
+      <ChevronDown className="h-4 w-4 opacity-50" />
+    </SelectPrimitive.Icon>
+  </SelectPrimitive.Trigger>
+))
+SelectTrigger.displayName = SelectPrimitive.Trigger.displayName
+
+const SelectScrollUpButton = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.ScrollUpButton>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollUpButton>
+>(({ className, ...props }, ref) => (
+  <SelectPrimitive.ScrollUpButton
+    ref={ref}
+    className={cn(
+      "flex cursor-default items-center justify-center py-1",
+      className
+    )}
+    {...props}
+  >
+    <ChevronUp className="h-4 w-4" />
+  </SelectPrimitive.ScrollUpButton>
+))
+SelectScrollUpButton.displayName = SelectPrimitive.ScrollUpButton.displayName
+
+const SelectScrollDownButton = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.ScrollDownButton>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollDownButton>
+>(({ className, ...props }, ref) => (
+  <SelectPrimitive.ScrollDownButton
+    ref={ref}
+    className={cn(
+      "flex cursor-default items-center justify-center py-1",
+      className
+    )}
+    {...props}
+  >
+    <ChevronDown className="h-4 w-4" />
+  </SelectPrimitive.ScrollDownButton>
+))
+SelectScrollDownButton.displayName =
+  SelectPrimitive.ScrollDownButton.displayName
+
+const SelectContent = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
+>(({ className, children, position = "popper", ...props }, ref) => (
+  <SelectPrimitive.Portal>
+    <SelectPrimitive.Content
+      ref={ref}
+      className={cn(
+        "relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+        position === "popper" &&
+          "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
+        className
+      )}
+      position={position}
+      {...props}
+    >
+      <SelectScrollUpButton />
+      <SelectPrimitive.Viewport
+        className={cn(
+          "p-1",
+          position === "popper" &&
+            "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]"
+        )}
+      >
+        {children}
+      </SelectPrimitive.Viewport>
+      <SelectScrollDownButton />
+    </SelectPrimitive.Content>
+  </SelectPrimitive.Portal>
+))
+SelectContent.displayName = SelectPrimitive.Content.displayName
+
+const SelectLabel = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Label>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Label>
+>(({ className, ...props }, ref) => (
+  <SelectPrimitive.Label
+    ref={ref}
+    className={cn("py-1.5 pl-8 pr-2 text-sm font-semibold", className)}
+    {...props}
+  />
+))
+SelectLabel.displayName = SelectPrimitive.Label.displayName
+
+const SelectItem = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Item>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
+>(({ className, children, ...props }, ref) => (
+  <SelectPrimitive.Item
+    ref={ref}
+    className={cn(
+      "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      className
+    )}
+    {...props}
+  >
+    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+      <SelectPrimitive.ItemIndicator>
+        <Check className="h-4 w-4" />
+      </SelectPrimitive.ItemIndicator>
+    </span>
+
+    <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+  </SelectPrimitive.Item>
+))
+SelectItem.displayName = SelectPrimitive.Item.displayName
+
+const SelectSeparator = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Separator>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Separator>
+>(({ className, ...props }, ref) => (
+  <SelectPrimitive.Separator
+    ref={ref}
+    className={cn("-mx-1 my-1 h-px bg-muted", className)}
+    {...props}
+  />
+))
+SelectSeparator.displayName = SelectPrimitive.Separator.displayName
+
+export {
+  Select,
+  SelectGroup,
+  SelectValue,
+  SelectTrigger,
+  SelectContent,
+  SelectLabel,
+  SelectItem,
+  SelectSeparator,
+  SelectScrollUpButton,
+  SelectScrollDownButton,
+}
+
+// File: components/ui/skeleton.tsx
+import { cn } from "@/lib/utils"
+
+function Skeleton({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn("animate-pulse rounded-md bg-muted", className)}
+      {...props}
+    />
+  )
+}
+
+export { Skeleton }
+
+// File: components/ui/tabs.tsx
+"use client"
+
+import * as React from "react"
+import * as TabsPrimitive from "@radix-ui/react-tabs"
+
+import { cn } from "@/lib/utils"
+
+const Tabs = TabsPrimitive.Root
+
+const TabsList = React.forwardRef<
+  React.ElementRef<typeof TabsPrimitive.List>,
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
+>(({ className, ...props }, ref) => (
+  <TabsPrimitive.List
+    ref={ref}
+    className={cn(
+      "inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground",
+      className
+    )}
+    {...props}
+  />
+))
+TabsList.displayName = TabsPrimitive.List.displayName
+
+const TabsTrigger = React.forwardRef<
+  React.ElementRef<typeof TabsPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
+>(({ className, ...props }, ref) => (
+  <TabsPrimitive.Trigger
+    ref={ref}
+    className={cn(
+      "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm",
+      className
+    )}
+    {...props}
+  />
+))
+TabsTrigger.displayName = TabsPrimitive.Trigger.displayName
+
+const TabsContent = React.forwardRef<
+  React.ElementRef<typeof TabsPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>
+>(({ className, ...props }, ref) => (
+  <TabsPrimitive.Content
+    ref={ref}
+    className={cn(
+      "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      className
+    )}
+    {...props}
+  />
+))
+TabsContent.displayName = TabsPrimitive.Content.displayName
+
+export { Tabs, TabsList, TabsTrigger, TabsContent }
+
+// File: components/ui/textarea.tsx
+import * as React from "react"
+
+import { cn } from "@/lib/utils"
+
+export interface TextareaProps
+  extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {}
+
+const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
+  ({ className, ...props }, ref) => {
+    return (
+      <textarea
+        className={cn(
+          "flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+          className
+        )}
+        ref={ref}
+        {...props}
+      />
+    )
+  }
+)
+Textarea.displayName = "Textarea"
+
+export { Textarea }
+
+// File: components/ui/toast.tsx
+"use client"
+
+import * as React from "react"
+import * as ToastPrimitives from "@radix-ui/react-toast"
+import { cva, type VariantProps } from "class-variance-authority"
+import { X } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+
+const ToastProvider = ToastPrimitives.Provider
+
+const ToastViewport = React.forwardRef<
+  React.ElementRef<typeof ToastPrimitives.Viewport>,
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Viewport>
+>(({ className, ...props }, ref) => (
+  <ToastPrimitives.Viewport
+    ref={ref}
+    className={cn(
+      "fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]",
+      className
+    )}
+    {...props}
+  />
+))
+ToastViewport.displayName = ToastPrimitives.Viewport.displayName
+
+const toastVariants = cva(
+  "group pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-md border p-6 pr-8 shadow-lg transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full",
+  {
+    variants: {
+      variant: {
+        default: "border bg-background text-foreground",
+        destructive:
+          "destructive group border-destructive bg-destructive text-destructive-foreground",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
+
+const Toast = React.forwardRef<
+  React.ElementRef<typeof ToastPrimitives.Root>,
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root> &
+    VariantProps<typeof toastVariants>
+>(({ className, variant, ...props }, ref) => {
+  return (
+    <ToastPrimitives.Root
+      ref={ref}
+      className={cn(toastVariants({ variant }), className)}
+      {...props}
+    />
+  )
+})
+Toast.displayName = ToastPrimitives.Root.displayName
+
+const ToastAction = React.forwardRef<
+  React.ElementRef<typeof ToastPrimitives.Action>,
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Action>
+>(({ className, ...props }, ref) => (
+  <ToastPrimitives.Action
+    ref={ref}
+    className={cn(
+      "inline-flex h-8 shrink-0 items-center justify-center rounded-md border bg-transparent px-3 text-sm font-medium ring-offset-background transition-colors hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 group-[.destructive]:border-muted/40 group-[.destructive]:hover:border-destructive/30 group-[.destructive]:hover:bg-destructive group-[.destructive]:hover:text-destructive-foreground group-[.destructive]:focus:ring-destructive",
+      className
+    )}
+    {...props}
+  />
+))
+ToastAction.displayName = ToastPrimitives.Action.displayName
+
+const ToastClose = React.forwardRef<
+  React.ElementRef<typeof ToastPrimitives.Close>,
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Close>
+>(({ className, ...props }, ref) => (
+  <ToastPrimitives.Close
+    ref={ref}
+    className={cn(
+      "absolute right-2 top-2 rounded-md p-1 text-foreground/50 opacity-0 transition-opacity hover:text-foreground focus:opacity-100 focus:outline-none focus:ring-2 group-hover:opacity-100 group-[.destructive]:text-red-300 group-[.destructive]:hover:text-red-50 group-[.destructive]:focus:ring-red-400 group-[.destructive]:focus:ring-offset-red-600",
+      className
+    )}
+    toast-close=""
+    {...props}
+  >
+    <X className="h-4 w-4" />
+  </ToastPrimitives.Close>
+))
+ToastClose.displayName = ToastPrimitives.Close.displayName
+
+const ToastTitle = React.forwardRef<
+  React.ElementRef<typeof ToastPrimitives.Title>,
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Title>
+>(({ className, ...props }, ref) => (
+  <ToastPrimitives.Title
+    ref={ref}
+    className={cn("text-sm font-semibold", className)}
+    {...props}
+  />
+))
+ToastTitle.displayName = ToastPrimitives.Title.displayName
+
+const ToastDescription = React.forwardRef<
+  React.ElementRef<typeof ToastPrimitives.Description>,
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Description>
+>(({ className, ...props }, ref) => (
+  <ToastPrimitives.Description
+    ref={ref}
+    className={cn("text-sm opacity-90", className)}
+    {...props}
+  />
+))
+ToastDescription.displayName = ToastPrimitives.Description.displayName
+
+type ToastProps = React.ComponentPropsWithoutRef<typeof Toast>
+
+type ToastActionElement = React.ReactElement<typeof ToastAction>
+
+export {
+  type ToastProps,
+  type ToastActionElement,
+  ToastProvider,
+  ToastViewport,
+  Toast,
+  ToastTitle,
+  ToastDescription,
+  ToastClose,
+  ToastAction,
+}
+
+// File: components/ui/toaster.tsx
+"use client"
+
+import {
+  Toast,
+  ToastClose,
+  ToastDescription,
+  ToastProvider,
+  ToastTitle,
+  ToastViewport,
+} from "@/components/ui/toast"
+import { useToast } from "@/components/ui/use-toast"
+
+export function Toaster() {
+  const { toasts } = useToast()
+
+  return (
+    <ToastProvider>
+      {toasts.map(function ({ id, title, description, action, ...props }) {
+        return (
+          <Toast key={id} {...props}>
+            <div className="grid gap-1">
+              {title && <ToastTitle>{title}</ToastTitle>}
+              {description && (
+                <ToastDescription>{description}</ToastDescription>
+              )}
+            </div>
+            {action}
+            <ToastClose />
+          </Toast>
+        )
+      })}
+      <ToastViewport />
+    </ToastProvider>
+  )
+}
+
+// File: components/ui/use-toast.ts
+"use client"
+
+// Inspired by react-hot-toast library
+import * as React from "react"
+
+import type {
+  ToastActionElement,
+  ToastProps,
+} from "@/components/ui/toast"
+
+const TOAST_LIMIT = 1
+const TOAST_REMOVE_DELAY = 1000000
+
+type ToasterToast = ToastProps & {
+  id: string
+  title?: React.ReactNode
+  description?: React.ReactNode
+  action?: ToastActionElement
+}
+
+const actionTypes = {
+  ADD_TOAST: "ADD_TOAST",
+  UPDATE_TOAST: "UPDATE_TOAST",
+  DISMISS_TOAST: "DISMISS_TOAST",
+  REMOVE_TOAST: "REMOVE_TOAST",
+} as const
+
+let count = 0
+
+function genId() {
+  count = (count + 1) % Number.MAX_SAFE_INTEGER
+  return count.toString()
+}
+
+type ActionType = typeof actionTypes
+
+type Action =
+  | {
+      type: ActionType["ADD_TOAST"]
+      toast: ToasterToast
+    }
+  | {
+      type: ActionType["UPDATE_TOAST"]
+      toast: Partial<ToasterToast>
+    }
+  | {
+      type: ActionType["DISMISS_TOAST"]
+      toastId?: ToasterToast["id"]
+    }
+  | {
+      type: ActionType["REMOVE_TOAST"]
+      toastId?: ToasterToast["id"]
+    }
+
+interface State {
+  toasts: ToasterToast[]
+}
+
+const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
+
+const addToRemoveQueue = (toastId: string) => {
+  if (toastTimeouts.has(toastId)) {
+    return
+  }
+
+  const timeout = setTimeout(() => {
+    toastTimeouts.delete(toastId)
+    dispatch({
+      type: "REMOVE_TOAST",
+      toastId: toastId,
+    })
+  }, TOAST_REMOVE_DELAY)
+
+  toastTimeouts.set(toastId, timeout)
+}
+
+export const reducer = (state: State, action: Action): State => {
+  switch (action.type) {
+    case "ADD_TOAST":
+      return {
+        ...state,
+        toasts: [action.toast, ...state.toasts].slice(0, TOAST_LIMIT),
+      }
+
+    case "UPDATE_TOAST":
+      return {
+        ...state,
+        toasts: state.toasts.map((t) =>
+          t.id === action.toast.id ? { ...t, ...action.toast } : t
+        ),
+      }
+
+    case "DISMISS_TOAST": {
+      const { toastId } = action
+
+      // ! Side effects ! - This could be extracted into a dismissToast() action,
+      // but I'll keep it here for simplicity
+      if (toastId) {
+        addToRemoveQueue(toastId)
+      } else {
+        state.toasts.forEach((toast) => {
+          addToRemoveQueue(toast.id)
+        })
+      }
+
+      return {
+        ...state,
+        toasts: state.toasts.map((t) =>
+          t.id === toastId || toastId === undefined
+            ? {
+                ...t,
+                open: false,
+              }
+            : t
+        ),
+      }
+    }
+    case "REMOVE_TOAST":
+      if (action.toastId === undefined) {
+        return {
+          ...state,
+          toasts: [],
+        }
+      }
+      return {
+        ...state,
+        toasts: state.toasts.filter((t) => t.id !== action.toastId),
+      }
+  }
+}
+
+const listeners: Array<(state: State) => void> = []
+
+let memoryState: State = { toasts: [] }
+
+function dispatch(action: Action) {
+  memoryState = reducer(memoryState, action)
+  listeners.forEach((listener) => {
+    listener(memoryState)
+  })
+}
+
+type Toast = Omit<ToasterToast, "id">
+
+function toast({ ...props }: Toast) {
+  const id = genId()
+
+  const update = (props: ToasterToast) =>
+    dispatch({
+      type: "UPDATE_TOAST",
+      toast: { ...props, id },
+    })
+  const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
+
+  dispatch({
+    type: "ADD_TOAST",
+    toast: {
+      ...props,
+      id,
+      open: true,
+      onOpenChange: (open) => {
+        if (!open) dismiss()
+      },
+    },
+  })
+
+  return {
+    id: id,
+    dismiss,
+    update,
+  }
+}
+
+function useToast() {
+  const [state, setState] = React.useState<State>(memoryState)
+
+  React.useEffect(() => {
+    listeners.push(setState)
+    return () => {
+      const index = listeners.indexOf(setState)
+      if (index > -1) {
+        listeners.splice(index, 1)
+      }
+    }
+  }, [state])
+
+  return {
+    ...state,
+    toast,
+    dismiss: (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }),
+  }
+}
+
+export { useToast, toast }
+
+// File: components/YamlToJson.tsx
+"use client";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
+import yaml from "js-yaml";
+import { useEffect, useState } from "react";
+
+export default function YamlToJson() {
+  const [input, setInput] = useState("");
+  const [output, setOutput] = useState("");
+  const { toast } = useToast();
+
+  useEffect(() => {
+    try {
+      const obj = yaml.load(input);
+      setOutput(JSON.stringify(obj, null, 2));
+    } catch (error) {
+      setOutput("Invalid YAML format");
+    }
+  }, [input]);
+
+  const copyContent = () => {
+    if (!output) return;
+    navigator.clipboard.writeText(output);
+    toast({
+      title: "Copied",
+      description: "Content copied to clipboard",
+      duration: 3000,
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <textarea
+        className="w-full h-40 p-2 border rounded"
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        placeholder="Paste your YAML here..."
+      />
+      <Button variant="outline" onClick={copyContent}>
+        Copy
+      </Button>
+      <pre className="w-full h-40 p-2 border rounded overflow-auto">
+        {output || "Your JSON output will appear here..."}
+      </pre>
+    </div>
+  );
+}
+
+// File: app/api/convert/route.ts
+import CloudConvert from "cloudconvert";
+import formidable from "formidable";
+import { promises as fs } from "fs";
+import { NextResponse } from "next/server";
+
+const cloudConvert = new CloudConvert(process.env.CLOUDCONVERT_API_KEY || "");
+
+// Ensure formidable doesn't parse automatically
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+export async function POST(req: Request) {
+  const form = new formidable.IncomingForm();
+
+  return new Promise((resolve, reject) => {
+    form.parse(req, async (err, fields, files) => {
+      if (err) return reject(err);
+
+      const { file } = files;
+      const { inputFormat, outputFormat } = fields;
+
+      if (!file || Array.isArray(file)) {
+        return resolve(NextResponse.error());
+      }
+
+      const fileBuffer = await fs.readFile(file.filepath);
+      const job = await cloudConvert.jobs.create({
+        tasks: {
+          "import/file": {
+            operation: "import/upload",
+          },
+          "convert/file": {
+            operation: "convert",
+            input: "import/file",
+            input_format: inputFormat,
+            output_format: outputFormat,
+          },
+          "export/url": {
+            operation: "export/url",
+            input: "convert/file",
+          },
+        },
+      });
+
+      const uploadTask = job.tasks.filter(
+        (task) => task.name === "import/file"
+      )[0];
+      await fetch(uploadTask.result.form.url, {
+        method: "PUT",
+        body: fileBuffer,
+      });
+
+      await cloudConvert.jobs.wait(job.id);
+      const exportTask = job.tasks.filter(
+        (task) => task.name === "export/url"
+      )[0];
+      const fileUrl = exportTask.result.files?.[0].url || "";
+
+      resolve(NextResponse.json({ url: fileUrl }));
+    });
+  });
+}
+
+// File: app/combine-images/page.tsx
+const page = () => {
+  return <div>page</div>;
+};
+
+export default page;
+
+// File: app/document-converter/page.tsx
+import DocumentConverter from "@/components/DocumentConverter";
+
+export default function Page() {
+  return (
+    <div>
+      <h1>Document Converter</h1>
+      <DocumentConverter />
+    </div>
+  );
+}
+
+// File: app/globals.css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 5.9% 10%;
+    --radius: 0.5rem;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+  }
+
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@keyframes border-beam {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-border-beam {
+  animation: border-beam var(--duration) s linear infinite;
+}
+
+@keyframes spin-slow {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+// File: app/images-combiner/page.tsx
+const page = () => {
+  return <div>page</div>;
+};
+
+export default page;
+
+// File: app/layout.tsx
+import AnimatedBackground from "@/components/AnimatedBackground";
+import Footer from "@/components/Footer";
+import NavBar from "@/components/NavBar";
+import { Toaster } from "@/components/ui/toaster";
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import { ThemeProvider } from "../components/theme-provider";
+import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata: Metadata = {
+  title: "FileConverter",
+  description: "Convert and merge your files easily to any format you want",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body className={inter.className}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <div className="flex flex-col min-h-screen">
+            <NavBar />
+            <main className="flex-grow">
+              <AnimatedBackground />
+              {children}
+            </main>
+            <Footer />
+          </div>
+        </ThemeProvider>
+        <Toaster />
+      </body>
+    </html>
+  );
+}
+
+// File: app/merge-files/page.tsx
+"use client";
+
+import { Progress } from "@/components/progress";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useToast } from "@/components/ui/use-toast";
+import { AnimatePresence, motion } from "framer-motion";
+import { PDFDocument } from "pdf-lib";
+import { useEffect, useState } from "react";
+import {
+  FaFileAlt,
+  FaFilePdf,
+  FaFileUpload,
+  FaFileWord,
+  FaTrash,
+} from "react-icons/fa";
+
+export default function MergePage() {
+  const [files, setFiles] = useState<File[]>([]);
+  const [mergeFormat, setMergeFormat] = useState<string>("pdf");
+  const [isMerging, setIsMerging] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [startTime, setStartTime] = useState<Date | null>(null);
+  const [estimatedEndTime, setEstimatedEndTime] = useState<Date | null>(null);
+  const { toast } = useToast();
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setFiles((prevFiles) => [
+        ...prevFiles,
+        ...Array.from(e.target.files || []),
+      ]);
+    }
+  };
+
+  const handleDelete = (index: number) => {
+    setFiles((prevFiles) => prevFiles.filter((_, i) => i !== index));
+  };
+
+  const handleMerge = async () => {
+    if (files.length < 2) {
+      toast({
+        title: "Error",
+        description: "Please select at least two files to merge.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsMerging(true);
+    setProgress(0);
+    setStartTime(new Date());
+    setEstimatedEndTime(new Date(Date.now() + files.length * 2000)); // Estimate 2 seconds per file for simplicity
+
+    try {
+      const mergedPdf = await PDFDocument.create();
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.type === "application/pdf") {
+          const pdfBytes = await file.arrayBuffer();
+          const pdf = await PDFDocument.load(pdfBytes);
+          const copiedPages = await mergedPdf.copyPages(
+            pdf,
+            pdf.getPageIndices()
+          );
+          copiedPages.forEach((page) => mergedPdf.addPage(page));
+        }
+        // For simplicity, we're only handling PDFs here. You can add logic for other file types.
+
+        setProgress(((i + 1) / files.length) * 100);
+        await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate delay for progress feedback
+      }
+
+      const pdfBytes = await mergedPdf.save();
+      const blob = new Blob([pdfBytes], { type: "application/pdf" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "merged_fileconverter_imadselka.pdf";
+      link.click();
+
+      toast({
+        title: "Success",
+        description: "Files merged successfully!",
+        variant: "default",
+      });
+    } catch (error) {
+      console.error("Error merging files:", error);
+      toast({
+        title: "Error",
+        description: "An error occurred while merging files. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsMerging(false);
+      setProgress(0);
+      setStartTime(null);
+      setEstimatedEndTime(null);
+    }
+  };
+
+  const getFileIcon = (file: File) => {
+    switch (file.type) {
+      case "application/pdf":
+        return <FaFilePdf />;
+      case "application/msword":
+      case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        return <FaFileWord />;
+      default:
+        return <FaFileAlt />;
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
+
+  const formatTime = (milliseconds: number) => {
+    const seconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+  };
+
+  // Update progress dynamically and calculate estimated remaining time
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (isMerging && startTime && estimatedEndTime) {
+      timer = setInterval(() => {
+        const now = new Date();
+        const elapsedTime = now.getTime() - startTime.getTime();
+        const totalTime = estimatedEndTime.getTime() - startTime.getTime();
+        const newProgress = Math.min((elapsedTime / totalTime) * 100, 100);
+        setProgress(newProgress);
+
+        if (now >= estimatedEndTime) {
+          clearInterval(timer);
+        }
+      }, 100);
+    }
+    return () => clearInterval(timer);
+  }, [isMerging, startTime, estimatedEndTime]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+      className="container mx-auto px-4 py-8"
+    >
+      <h1 className="text-4xl font-bold mb-8 text-center">Merge Documents</h1>
+      <div className="max-w-md mx-auto">
+        <motion.div
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className="mb-6"
+        >
+          <Label
+            htmlFor="file-upload"
+            className="cursor-pointer bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-2 px-4 rounded inline-flex items-center w-full justify-center"
+          >
+            <FaFileUpload className="mr-2" />
+            <span>Choose files to merge</span>
+          </Label>
+          <Input
+            id="file-upload"
+            type="file"
+            multiple
+            onChange={handleFileChange}
+            className="hidden"
+            accept=".pdf,.doc,.docx,.txt,.csv"
+          />
+        </motion.div>
+        <AnimatePresence>
+          {files.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="mb-6"
+            >
+              <h2 className="text-xl font-semibold mb-2">Selected Files:</h2>
+              <ul className="space-y-2">
+                {files.map((file, index) => (
+                  <motion.li
+                    key={`${file.name}-${index}`}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="flex items-center justify-between w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-2 rounded"
+                  >
+                    <div className="flex justify-centeritems-center space-x-2  w-full flex-grow">
+                      {getFileIcon(file)}
+                      <span className="truncate flex-grow">{file.name}</span>
+                    </div>
+                    <div className="flex justify-center items-center space-x-2">
+                      <span className="flex-row text-sm text-muted-foreground">
+                        {formatFileSize(file.size)}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(index)}
+                        className="text-destructive hover:text-destructive/90"
+                      >
+                        <FaTrash />
+                      </Button>
+                    </div>
+                  </motion.li>
+                ))}
+              </ul>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <div className="mb-6">
+          <Select onValueChange={setMergeFormat} value={mergeFormat}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select output format" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pdf">PDF</SelectItem>
+              <SelectItem value="docx">DOCX</SelectItem>
+              <SelectItem value="txt">TXT</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+          <Button
+            onClick={handleMerge}
+            className="w-full"
+            variant="outline"
+            disabled={files.length < 2 || isMerging}
+          >
+            {isMerging ? "Merging Files..." : "Merge Files (ONLY PDFs)"}
+          </Button>
+        </motion.div>
+        {isMerging && (
+          <div className="mt-4 space-y-2">
+            <Progress value={progress} className="w-full" />
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>Progress: {progress.toFixed(0)}%</span>
+              <span>
+                {startTime &&
+                  estimatedEndTime &&
+                  `Est. time remaining: ${formatTime(
+                    Math.max(0, estimatedEndTime.getTime() - Date.now())
+                  )}`}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+// File: app/not-found.tsx
+"use client";
+
+import { motion } from "framer-motion";
+import Link from "next/link";
+import { useEffect } from "react";
+
+export default function NotFound() {
+  useEffect(() => {
+    const navbar = document.querySelector("nav");
+    const footer = document.querySelector("footer");
+    if (navbar) navbar.style.display = "none";
+    if (footer) footer.style.display = "none";
+
+    return () => {
+      if (navbar) navbar.style.display = "";
+      if (footer) footer.style.display = "";
+    };
+  }, []);
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground">
+      <motion.div
+        initial={{ opacity: 0, y: -50 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="text-9xl font-bold"
+      >
+        Lost your way?
+      </motion.div>
+      <motion.h1
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.2, duration: 0.5 }}
+        className="mt-8 text-4xl font-semibold"
+      >
+        Error Code <span className="font-bold text-foreground">404</span>
+      </motion.h1>
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.4, duration: 0.5 }}
+        className="mt-4 text-xl text-muted-foreground"
+      >
+        Oops! The page you&apos;re looking for doesn&apos;t exist.
+      </motion.p>
+      <motion.div
+        initial={{ opacity: 0, y: 50 }}
+        animate={{ opacity: 1, y: 1 }}
+        transition={{ delay: 0.8, type: "spring", duration: 0.8 }}
+      >
+        <Link
+          href="/"
+          className="mt-8 inline-block px-6 py-3 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          FileConverter Home
+        </Link>
+      </motion.div>
+    </div>
+  );
+}
+
+// File: app/page.tsx
+import Content from "@/components/Content";
+
+export default function Home() {
+  return (
+    <main className="flex flex-col">
+      <div className="flex-grow flex items-center justify-center">
+        <Content />
+      </div>
+    </main>
+  );
+}
+
+// File: app/utilities/image-resizer/page.tsx
+const page = () => {
+  return <div>page</div>;
+};
+
+export default page;
+
+// File: app/utilities/json-csv/page.tsx
+"use client";
+
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/components/ui/use-toast";
+import { useCallback, useEffect, useState } from "react";
+
+export default function CsvJsonConverter() {
+  const [input, setInput] = useState("");
+  const [output, setOutput] = useState("");
+  const [tab, setTab] = useState("csvToJson");
+  const { toast } = useToast();
+
+  const convertCsvToJson = useCallback(() => {
+    try {
+      const lines = input.trim().split("\n");
+      const headers = lines[0].split(",");
+      const result = lines.slice(1).map((line) => {
+        const obj: { [key: string]: string } = {};
+        const currentLine = line.split(",");
+        headers.forEach((header, i) => {
+          obj[header.trim()] = currentLine[i]?.trim() || "";
+        });
+        return obj;
+      });
+      setOutput(JSON.stringify(result, null, 2));
+    } catch (error) {
+      setOutput("Invalid CSV input");
+    }
+  }, [input]);
+
+  const convertJsonToCsv = useCallback(() => {
+    try {
+      const obj = JSON.parse(input);
+      const headers = Object.keys(obj[0]);
+      const csvRows = [
+        headers.join(","),
+        ...obj.map((row: any) =>
+          headers.map((fieldName) => JSON.stringify(row[fieldName])).join(",")
+        ),
+      ];
+      setOutput(csvRows.join("\n"));
+    } catch (error) {
+      setOutput("Invalid JSON input");
+    }
+  }, [input]);
+
+  useEffect(() => {
+    if (input) {
+      if (tab === "csvToJson") {
+        convertCsvToJson();
+      } else {
+        convertJsonToCsv();
+      }
+    }
+  }, [input, convertCsvToJson, convertJsonToCsv, tab]);
+
+  const copyContent = useCallback(() => {
+    if (!output) return;
+    navigator.clipboard.writeText(output);
+    toast({
+      title: "Copied",
+      description: "Content copied to clipboard",
+      duration: 3000,
+    });
+  }, [output, toast]);
+
+  const handleTabChange = useCallback((value: string) => {
+    setTab(value);
+    setOutput(""); // Clear output on tab change
+  }, []);
+
+  return (
+    <div className="flex justify-center items-center">
+      <Card className="w-full max-w-lg">
+        <CardHeader>
+          <CardTitle>CSV/JSON Converter</CardTitle>
+          <CardDescription>
+            Convert between CSV and JSON formats in real-time
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs
+            defaultValue="csvToJson"
+            className="w-full"
+            onValueChange={handleTabChange}
+          >
+            <TabsList className="grid grid-cols-2">
+              <TabsTrigger value="csvToJson">CSV to JSON</TabsTrigger>
+              <TabsTrigger value="jsonToCsv">JSON to CSV</TabsTrigger>
+            </TabsList>
+            <TabsContent value="csvToJson">
+              <div className="space-y-4">
+                <Textarea
+                  placeholder="Paste your CSV here..."
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  className="min-h-[150px] w-full"
+                />
+                <div className="flex justify-between">
+                  <Button onClick={copyContent} variant="outline">
+                    Copy Output
+                  </Button>
+                </div>
+                <Textarea
+                  readOnly
+                  value={output}
+                  className="min-h-[150px] w-full"
+                  placeholder="Your JSON output will appear here..."
+                />
+              </div>
+            </TabsContent>
+            <TabsContent value="jsonToCsv">
+              <div className="space-y-4">
+                <Textarea
+                  placeholder="Paste your JSON here..."
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  className="min-h-[150px] w-full"
+                />
+                <div className="flex justify-between">
+                  <Button onClick={copyContent} variant="outline">
+                    Copy
+                  </Button>
+                </div>
+                <Textarea
+                  readOnly
+                  value={output}
+                  className="min-h-[150px] w-full"
+                  placeholder="Your CSV output will appear here..."
+                />
+              </div>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// File: app/utilities/json-formatter/page.tsx
+"use client";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/components/ui/use-toast";
+import { useCallback, useEffect, useState } from "react";
+
+export default function JsonFormatter() {
+  const [input, setInput] = useState("");
+  const [output, setOutput] = useState("");
+  const { toast } = useToast();
+
+  const formatJson = useCallback(() => {
+    try {
+      const formatted = JSON.stringify(JSON.parse(input), null, 2);
+      setOutput(formatted);
+    } catch (error) {
+      setOutput("Invalid JSON format");
+    }
+  }, [input]);
+
+  useEffect(() => {
+    if (input) formatJson(); // Trigger real-time formatting
+  }, [input, formatJson]);
+
+  const copyContent = () => {
+    if (!output) return;
+    navigator.clipboard.writeText(output);
+    toast({
+      title: "Copied",
+      description: "Formatted JSON copied to clipboard",
+      duration: 3000,
+    });
+  };
+
+  return (
+    <div className="flex justify-center items-center">
+      <Card className="w-full max-w-lg ">
+        <CardHeader>
+          <CardTitle>JSON Formatter</CardTitle>
+          <CardDescription>
+            Format and prettify JSON data in real-time
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <Textarea
+              placeholder="Paste your JSON here..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              className="min-h-[150px] w-full"
+            />
+            <div className="flex justify-between">
+              <Button onClick={copyContent} variant="outline">
+                Copy
+              </Button>
+            </div>
+            <Textarea
+              readOnly
+              value={output}
+              className="min-h-[150px] w-full"
+              placeholder="Formatted JSON will appear here..."
+            />
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// File: app/utilities/json-yaml/page.tsx
+"use client";
+
+import JsonToYaml from "@/components/JsonToYaml";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import YamlToJson from "@/components/YamlToJson";
+import { useState } from "react";
+
+export default function Page() {
+  const [activeTool, setActiveTool] = useState<"jsonToYaml" | "yamlToJson">(
+    "jsonToYaml"
+  );
+
+  return (
+    <Card className="max-w-xl max-h-screen mx-auto mt-2 p-4">
+      {" "}
+      <CardHeader>
+        {" "}
+        <CardTitle>JSON/YAML Converter</CardTitle>{" "}
+        <CardDescription>
+          {" "}
+          Switch between JSON-to-YAML and YAML-to-JSON converters{" "}
+        </CardDescription>{" "}
+      </CardHeader>{" "}
+      <CardContent>
+        {" "}
+        <div className="flex flex-row justify-start items-center gap-5 mb-4">
+          {" "}
+          <Button
+            variant={activeTool === "jsonToYaml" ? "outline" : "ghost"}
+            onClick={() => setActiveTool("jsonToYaml")}
+          >
+            {" "}
+            JSON to YAML{" "}
+          </Button>{" "}
+          <Button
+            variant={activeTool === "yamlToJson" ? "outline" : "ghost"}
+            onClick={() => setActiveTool("yamlToJson")}
+          >
+            {" "}
+            YAML to JSON{" "}
+          </Button>{" "}
+        </div>
+        {activeTool === "jsonToYaml" && <JsonToYaml />}
+        {activeTool === "yamlToJson" && <YamlToJson />}
+      </CardContent>
+    </Card>
+  );
+}
+
+// File: app/utilities/layout.tsx
+"use client";
+
+import { Button } from "@/components/ui/button";
+import { motion } from "framer-motion";
+import { ArrowLeft } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+
+export default function UtilitiesLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const showBackButton = pathname !== "/utilities";
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      {showBackButton && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="p-4"
+        >
+          <Button
+            variant="ghost"
+            onClick={() => router.push("/utilities")}
+            className="mb-4"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Utilities
+          </Button>
+        </motion.div>
+      )}
+      <main className="flex-grow">{children}</main>
+    </div>
+  );
+}
+
+// File: app/utilities/page.tsx
+import OtherUtilities from "@/components/OtherUtilities";
+
+const page = () => {
+  return <OtherUtilities />;
+};
+
+export default page;
+
+// File: app/utilities/regex-builder-tester/page.tsx
+"use client";
+import RegexBuilder from "@/components/RegexBuilder";
+import RegexTester from "@/components/RegexTester";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/components/ui/use-toast";
+import { useEffect, useState } from "react";
+
+export default function Page() {
+  const [regexParts, setRegexParts] = useState<string[]>([]);
+  const [customInput, setCustomInput] = useState("");
+  const [flags, setFlags] = useState("g");
+  const [testString, setTestString] = useState("");
+  const [regexOutput, setRegexOutput] = useState("");
+  const [matchOutput, setMatchOutput] = useState("");
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const regex = regexParts.join("");
+    setRegexOutput(regex ? `/${regex}/${flags}` : "");
+    testRegex(regex);
+  }, [regexParts, flags, testString]);
+
+  const testRegex = (regex: string) => {
+    try {
+      const regexObj = new RegExp(regex, flags);
+      const matches = Array.from(
+        testString.matchAll(regexObj),
+        (match) => match[0]
+      );
+      setMatchOutput(matches.length ? matches.join("\n") : "No matches found");
+    } catch (error) {
+      setMatchOutput("Invalid regex");
+    }
+  };
+
+  const copyRegex = () => {
+    if (!regexOutput) return;
+    navigator.clipboard.writeText(regexOutput);
+    toast({
+      title: "Copied",
+      description: "Regex copied to clipboard",
+      duration: 3000,
+    });
+  };
+
+  return (
+    <div className="flex justify-center items-center">
+      <Card className="flex flex-col justify-center items-center w-full max-w-4xl lg:max-w-5xl h-full p-4">
+        <CardHeader className="text-center">
+          <CardTitle className="text-xl md:text-2xl">
+            Regex Builder and Tester
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="w-full">
+          <Tabs defaultValue="builder" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="builder">Builder</TabsTrigger>
+              <TabsTrigger value="tester">Tester</TabsTrigger>
+            </TabsList>
+            <TabsContent value="builder">
+              <RegexBuilder
+                regexParts={regexParts}
+                setRegexParts={setRegexParts}
+                customInput={customInput}
+                setCustomInput={setCustomInput}
+                flags={flags}
+                setFlags={setFlags}
+                copyRegex={copyRegex}
+              />
+              <Textarea
+                readOnly
+                value={regexOutput}
+                className="min-h-[50px]"
+                placeholder="Your regex will appear here..."
+              />
+            </TabsContent>
+            <TabsContent value="tester">
+              <RegexTester
+                testString={testString}
+                setTestString={setTestString}
+                matchOutput={matchOutput}
+                regexPattern={""}
+                setRegexPattern={function (input: string): void {
+                  throw new Error("Function not implemented.");
+                }}
+              />
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// File: app/utilities/url-encoder-decoder/page.tsx
+"use client";
+
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/components/ui/use-toast";
+import { useCallback, useEffect, useState } from "react";
+
+export default function UrlEncoderDecoder() {
+  const [input, setInput] = useState("");
+  const [output, setOutput] = useState("");
+  const { toast } = useToast();
+
+  const encode = useCallback(
+    () => setOutput(encodeURIComponent(input)),
+    [input]
+  );
+  const decode = useCallback(
+    () => setOutput(decodeURIComponent(input)),
+    [input]
+  );
+
+  useEffect(() => {
+    if (input) encode(); // Trigger real-time encoding
+  }, [input, encode]);
+
+  const copyContent = useCallback(() => {
+    if (!output) return;
+    navigator.clipboard.writeText(output);
+    toast({
+      title: "Copied",
+      description: "Content copied to clipboard",
+      duration: 3000,
+    });
+  }, [output, toast]);
+  return (
+    <div className="flex justify-center items-center">
+      <Card className="w-full max-w-lg">
+        <CardHeader>
+          <CardTitle>URL Encoder/Decoder</CardTitle>
+          <CardDescription>
+            Encode or decode URL components in real-time
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="encode" className="w-full">
+            <TabsList className="grid grid-cols-2">
+              <TabsTrigger value="encode">Encode</TabsTrigger>
+              <TabsTrigger value="decode" onClick={decode}>
+                Decode
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="encode">
+              <div className="space-y-4">
+                <Textarea
+                  placeholder="Enter text to encode..."
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  className="min-h-[100px] w-full"
+                />
+                <div className="flex justify-between">
+                  <Button onClick={copyContent} variant="outline">
+                    Copy
+                  </Button>
+                </div>
+                <Textarea
+                  readOnly
+                  value={output}
+                  className="min-h-[100px] w-full"
+                  placeholder="Encoded URL will appear here..."
+                />
+              </div>
+            </TabsContent>
+            <TabsContent value="decode">
+              <div className="space-y-4">
+                <Textarea
+                  placeholder="Enter URL to decode..."
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  className="min-h-[100px] w-full"
+                />
+                <div className="flex justify-between">
+                  <Button onClick={copyContent} variant="outline">
+                    Copy
+                  </Button>
+                </div>
+                <Textarea
+                  readOnly
+                  value={output}
+                  className="min-h-[100px] w-full"
+                  placeholder="Decoded text will appear here..."
+                />
+              </div>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// File: utils/bytesToSize.ts
+export default function bytesToSize(bytes: number): string {
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+  if (bytes === 0) return "0 Byte";
+  const i = parseInt(String(Math.floor(Math.log(bytes) / Math.log(1024))), 10);
+  return `${Math.round(bytes / Math.pow(1024, i))} ${sizes[i]}`;
+}
+
+// File: utils/cloudConvertService.ts
+import axios from "axios";
+
+const API_URL = "https://api.cloudconvert.com/v2/jobs";
+const API_KEY = process.env.NEXT_APP_CLOUDCONVET_API_KEY;
+console.log("API_KEY", API_KEY);
+if (!API_KEY) {
+  console.log("CloudConvert API key not found.");
+}
+
+export const convertDocument = async (
+  file: File,
+  targetFormat: string
+): Promise<{ url: string; output: string }> => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    // Create the conversion job
+    const jobResponse = await axios.post(
+      API_URL,
+      {
+        tasks: {
+          "import-my-file": {
+            operation: "import/upload",
+          },
+          "convert-my-file": {
+            operation: "convert",
+            input: "import-my-file",
+            output_format: targetFormat,
+          },
+          "export-my-file": {
+            operation: "export/url",
+            input: "convert-my-file",
+          },
+        },
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const jobId = jobResponse.data.data.id;
+
+    // Upload the file
+    const uploadTask = jobResponse.data.data.tasks.find(
+      (task: any) => task.operation === "import/upload"
+    );
+    if (!uploadTask || !uploadTask.result || !uploadTask.result.form) {
+      throw new Error("Upload task not found or incomplete.");
+    }
+
+    const uploadUrl = uploadTask.result.form.url;
+    await axios.post(uploadUrl, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+
+    // Wait for the conversion to complete
+    let conversionResponse;
+    while (true) {
+      conversionResponse = await axios.get(`${API_URL}/${jobId}`, {
+        headers: {
+          Authorization: `Bearer ${API_KEY}`,
+        },
+      });
+
+      const status = conversionResponse.data.data.status;
+      if (status === "finished") break;
+      if (status === "error") {
+        console.error("Conversion error:", conversionResponse.data);
+        throw new Error(`Conversion failed with status: ${status}`);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+
+    // Get the export task
+    const exportTask = conversionResponse.data.data.tasks.find(
+      (task: any) => task.operation === "export/url"
+    );
+
+    if (
+      !exportTask ||
+      !exportTask.result ||
+      !exportTask.result.files ||
+      !exportTask.result.files[0]
+    ) {
+      throw new Error("Export task not found or incomplete.");
+    }
+
+    const fileUrl = exportTask.result.files[0].url;
+    const outputFileName =
+      file.name.replace(/\.[^/.]+$/, "") + "." + targetFormat;
+
+    return { url: fileUrl, output: outputFileName };
+  } catch (error) {
+    console.error("Error converting document:", error);
+    throw error;
+  }
+};
+
+// File: utils/compressFileName.ts
+// utils/compressFileName.ts
+export default function compressFileName(
+  name: string,
+  min: number = 10,
+  max: number = 30
+): string {
+  const extIndex = name.lastIndexOf(".");
+
+  if (extIndex === -1 || name.length <= max) {
+    return name;
+  }
+
+  const baseName = name.slice(0, extIndex); // Extract the base name without extension
+  const ext = name.slice(extIndex); // Extract the extension
+
+  if (baseName.length <= min) {
+    return name;
+  }
+
+  const start = baseName.slice(0, min); // First part of the base name
+  const end = baseName.slice(-min); // Last part of the base name
+
+  return `${start}...${end}${ext}`;
+}
+
+// File: utils/convert.ts
+import { Action } from "@/types/Action";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { fetchFile } from "@ffmpeg/util";
+
+// Function to get the file extension from a file name
+function getFileExtension(file_name: string): string {
+  const match = file_name.match(/\.(\w+)$/);
+  return match ? match[1] : "";
+}
+
+// Function to remove the file extension from a file name
+function removeFileExtension(file_name: string): string {
+  return file_name.replace(/\.[^/.]+$/, "");
+}
+
+export default async function convert(
+  ffmpeg: FFmpeg,
+  action: Action
+): Promise<any> {
+  const { file, to, file_name, file_type } = action;
+  const input = getFileExtension(file_name);
+  const output = removeFileExtension(file_name) + "." + to;
+
+  if (!input) {
+    throw new Error("Invalid file extension");
+  }
+
+  // Write file to FFmpeg
+  await ffmpeg.writeFile(input, await fetchFile(file));
+
+  // Define FFmpeg command with optimizations
+  const ffmpeg_cmd =
+    to === "3gp"
+      ? [
+          "-i",
+          input,
+          "-r",
+          "20",
+          "-s",
+          "352x288",
+          "-b:v",
+          "400k",
+          "-c:a",
+          "aac",
+          "-ac",
+          "1",
+          "-ar",
+          "8000",
+          "-b:a",
+          "24k",
+          output,
+        ]
+      : [
+          "-i",
+          input,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "ultrafast",
+          "-crf",
+          "23",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "192k",
+          output,
+        ];
+
+  // Execute FFmpeg command
+  await ffmpeg.exec(ffmpeg_cmd);
+
+  // Read output file and create URL
+  const data = await ffmpeg.readFile(output);
+  const blob = new Blob([data], { type: "image/gif" });
+  const url = URL.createObjectURL(blob);
+  return { url, output };
+}
+
+// File: utils/documentConversion.ts
+import { Document, Packer, Paragraph, TextRun } from "docx";
+import { PDFDocument, rgb } from "pdf-lib";
+
+export async function convertDocumentToFormat(
+  file: File,
+  outputFormat: string
+): Promise<Blob> {
+  const arrayBuffer = await file.arrayBuffer();
+
+  switch (outputFormat) {
+    case "pdf":
+      return convertToPdf(arrayBuffer);
+    case "docx":
+      return convertToDocx(arrayBuffer);
+    case "txt":
+      return convertToTxt(arrayBuffer);
+    default:
+      throw new Error("Unsupported output format");
+  }
+}
+
+async function convertToPdf(arrayBuffer: ArrayBuffer): Promise<Blob> {
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage();
+  const { width, height } = page.getSize();
+  const fontSize = 12;
+
+  const text = new TextDecoder().decode(arrayBuffer);
+  page.drawText(text, {
+    x: 50,
+    y: height - 4 * fontSize,
+    size: fontSize,
+    color: rgb(0, 0, 0),
+  });
+
+  const pdfBytes = await pdfDoc.save();
+  return new Blob([pdfBytes], { type: "application/pdf" });
+}
+
+async function convertToDocx(arrayBuffer: ArrayBuffer): Promise<Blob> {
+  const text = new TextDecoder().decode(arrayBuffer);
+  const doc = new Document({
+    sections: [
+      {
+        properties: {},
+        children: [
+          new Paragraph({
+            children: [new TextRun(text)],
+          }),
+        ],
+      },
+    ],
+  });
+
+  const docxBuffer = await Packer.toBuffer(doc);
+  return new Blob([docxBuffer], {
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
+}
+
+async function convertToTxt(arrayBuffer: ArrayBuffer): Promise<Blob> {
+  const text = new TextDecoder().decode(arrayBuffer);
+  return new Blob([text], { type: "text/plain" });
+}
+
+// File: utils/fileToIcon.tsx
+// utils/fileToIcon.tsx
+import { FaFileAudio, FaFileImage, FaVideo } from "react-icons/fa";
+
+export default function fileToIcon(type: string) {
+  if (type.startsWith("image")) return <FaFileImage />;
+  if (type.startsWith("video")) return <FaVideo />;
+  if (type.startsWith("audio")) return <FaFileAudio />;
+  return <FaFileImage />;
+}
+
+// File: utils/fileUtils.ts
+import mammoth from "mammoth";
+import { PDFDocument, StandardFonts } from "pdf-lib";
+import * as pdfjsLib from "pdfjs-dist";
+
+export async function mergeFiles(
+  files: File[],
+  outputFormat: string,
+  progressCallback: (progress: number) => void
+): Promise<ArrayBuffer | Uint8Array> {
+  const mergedPdf = await PDFDocument.create();
+  let mergedText = "";
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+
+    if (file.type === "application/pdf") {
+      // Merge PDF content
+      const pdfBytes = await file.arrayBuffer();
+      const pdf = await PDFDocument.load(pdfBytes);
+      const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+      copiedPages.forEach((page) => mergedPdf.addPage(page));
+    } else if (
+      file.type === "application/msword" ||
+      file.type ===
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ) {
+      // Extract text from DOCX files
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+      mergedText += result.value + "\n\n";
+    } else if (file.type === "text/plain") {
+      // Merge plain text
+      const text = await file.text();
+      mergedText += text + "\n\n";
+    }
+
+    // Update progress
+    progressCallback(((i + 1) / files.length) * 100);
+  }
+
+  // If we have extracted text, convert it into a PDF and merge
+  if (mergedText) {
+    const textPdf = await PDFDocument.create();
+    const page = textPdf.addPage();
+    const font = await textPdf.embedFont(StandardFonts.Helvetica);
+    page.drawText(mergedText, {
+      x: 50,
+      y: page.getHeight() - 50,
+      font,
+      size: 12,
+    });
+    const textPdfBytes = await textPdf.save();
+    const copiedPages = await mergedPdf.copyPages(
+      await PDFDocument.load(textPdfBytes),
+      [0]
+    );
+    copiedPages.forEach((page) => mergedPdf.addPage(page));
+  }
+
+  // Handle different output formats (PDF, DOCX, TXT)
+  if (outputFormat === "pdf") {
+    return await mergedPdf.save();
+  } else if (outputFormat === "docx" || outputFormat === "txt") {
+    // Extract text from PDF for DOCX or TXT output using pdfjs-dist
+    const pdfBytes = await mergedPdf.save();
+    const extractedText = await extractTextFromPdf(pdfBytes);
+
+    if (outputFormat === "docx") {
+      // For DOCX, we're returning plain text (requires a proper DOCX generator for real-world usage)
+      return new TextEncoder().encode(extractedText);
+    } else {
+      // Return plain text for TXT format
+      return new TextEncoder().encode(extractedText);
+    }
+  }
+
+  throw new Error("Unsupported output format");
+}
+
+// Utility function to extract text from a PDF using pdfjs-dist
+async function extractTextFromPdf(pdfBytes: ArrayBuffer): Promise<string> {
+  const pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
+  let extractedText = "";
+
+  for (let i = 0; i < pdfDoc.numPages; i++) {
+    const page = await pdfDoc.getPage(i + 1);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items.map((item: any) => item.str).join(" ");
+    extractedText += pageText + "\n\n";
+  }
+
+  return extractedText;
+}
+
+// File: utils/loadffmpeg.ts
+// imports
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { toBlobURL } from "@ffmpeg/util";
+
+export default async function loadFfmpeg(): Promise<FFmpeg> {
+  const ffmpeg = new FFmpeg();
+  const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.2/dist/umd";
+  await ffmpeg.load({
+    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+  });
+  return ffmpeg;
+}
+
+// File: utils/otherUtilities.ts
+import { GitFork, Home, UserRoundPlus } from "lucide-react";
+
+export const utilities = [
+  {
+    title: "JSON to CSV / CSV to JSON",
+    description: "Convert between JSON and CSV formats.",
+    link: "utilities/json-csv",
+    shortcut: "Alt+J",
+  },
+  {
+    title: "JSON to YAML / YAML to JSON",
+    description: "Convert between JSON and YAML formats.",
+    link: "utilities/json-yaml",
+    shortcut: "Alt+Y",
+  },
+  {
+    title: "JSON Formatter",
+    description: "Format and beautify your JSON data.",
+    link: "utilities/json-formatter",
+    shortcut: "Alt+F",
+  },
+  {
+    title: "URL Encoder/Decoder",
+    description: "Encode or decode URLs safely.",
+    link: "utilities/url-encoder-decoder",
+    shortcut: "Alt+U",
+  },
+  {
+    title: "Regex Builder & Tester",
+    description: "Build and test regular expressions.",
+    link: "utilities/regex-builder-tester",
+    shortcut: "Alt+R",
+  },
+  {
+    title: "Image Resizer",
+    description: "Resize images to a specific width and height.",
+    link: "utilities/image-resizer",
+    shortcut: "Alt+I",
+  },
+];
+export const links = [
+  {
+    icon: GitFork,
+    title: "Contribute on GitHub",
+    href: "https://github.com/imadselka/fileconverter",
+    shortcut: "Alt+G",
+  },
+  {
+    icon: UserRoundPlus,
+    title: "Follow me on social media",
+    href: "https://linktr.ee/ImadSelka",
+    shortcut: "Alt+S",
+  },
+  { icon: Home, title: "Home", href: "/", shortcut: "Alt+H" },
+];
+
+// File: lib/utils.ts
+import { type ClassValue, clsx } from "clsx"
+import { twMerge } from "tailwind-merge"
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+
+// File: constants/fileExtensions.ts
+export const fileExtensions = {
+  image: ["PNG", "JPG", "SVG", "WEBP"],
+  document: ["PDF", "DOC", "DOCX"],
+  audio: ["mp3", "wav", "aac", "flac", "ogg"],
+  video: ["mp4", "mov", "avi", "mkv", "flv", "wmv"],
+};
+
+export const getExtensionsByType = (fileType: string): string[] => {
+  switch (true) {
+    case fileType.startsWith("image/"):
+      return fileExtensions.image;
+    case fileType.startsWith("audio/"):
+      return fileExtensions.audio;
+    case fileType.startsWith("video/"):
+      return fileExtensions.video;
+    case fileType === "application/pdf":
+    case fileType === "text/csv": // Corrected MIME type for CSV
+    case fileType === "application/msword":
+    case fileType ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    case fileType === "application/vnd.ms-excel":
+    case fileType ===
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+    case fileType === "application/vnd.ms-powerpoint":
+    case fileType ===
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+      return fileExtensions.document;
+    default:
+      return [];
+  }
+};
+
+// File: types/Action.ts
+export type Action = {
+  file_name: string;
+  file_size: number;
+  from: string;
+  to: string;
+  file_type: string;
+  file: File;
+  is_converted: boolean;
+  is_converting: boolean;
+  is_error: boolean;
+  url?: string;
+  output?: string;
+};
+

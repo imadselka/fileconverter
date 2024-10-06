@@ -31,6 +31,12 @@ export const utilities = [
     link: "utilities/regex-builder-tester",
     shortcut: "Alt+R",
   },
+  {
+    title: "Image Resizer",
+    description: "Resize images to a specific width and height.",
+    link: "utilities/image-resizer",
+    shortcut: "Alt+I",
+  },
 ];
 export const links = [
   {

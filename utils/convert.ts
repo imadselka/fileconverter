@@ -16,7 +16,7 @@ function removeFileExtension(file_name: string): string {
 export default async function convert(
   ffmpeg: FFmpeg,
   action: Action
-): Promise<{ url: string; output: string }> {
+): Promise<any> {
   const { file, to, file_name, file_type } = action;
   const input = getFileExtension(file_name);
   const output = removeFileExtension(file_name) + "." + to;
@@ -71,7 +71,7 @@ export default async function convert(
 
   // Read output file and create URL
   const data = await ffmpeg.readFile(output);
-  const blob = new Blob([data], { type: file_type.split("/")[0] });
+  const blob = new Blob([data], { type: "image/gif" });
   const url = URL.createObjectURL(blob);
   return { url, output };
 }
