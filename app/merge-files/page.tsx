@@ -58,7 +58,7 @@ export default function MergePage() {
     setIsMerging(true);
     setProgress(0);
     setStartTime(new Date());
-    setEstimatedEndTime(new Date(Date.now() + files.length * 1000)); // Estimate 1 second per file
+    setEstimatedEndTime(new Date(Date.now() + files.length * 2000)); // Estimate 2 seconds per file for simplicity
 
     try {
       const mergedPdf = await PDFDocument.create();
@@ -74,10 +74,10 @@ export default function MergePage() {
           );
           copiedPages.forEach((page) => mergedPdf.addPage(page));
         }
-        // For simplicity, we're only handling PDFs here. You'd need to add logic for other file types.
+        // For simplicity, we're only handling PDFs here. You can add logic for other file types.
 
         setProgress(((i + 1) / files.length) * 100);
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate delay for progress feedback
       }
 
       const pdfBytes = await mergedPdf.save();
@@ -134,6 +134,7 @@ export default function MergePage() {
     return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
   };
 
+  // Update progress dynamically and calculate estimated remaining time
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (isMerging && startTime && estimatedEndTime) {

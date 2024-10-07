@@ -6,13 +6,11 @@ import { useEffect } from "react";
 
 export default function NotFound() {
   useEffect(() => {
-    // Remove NavBar and Footer
     const navbar = document.querySelector("nav");
     const footer = document.querySelector("footer");
     if (navbar) navbar.style.display = "none";
     if (footer) footer.style.display = "none";
 
-    // Restore NavBar and Footer on component unmount
     return () => {
       if (navbar) navbar.style.display = "";
       if (footer) footer.style.display = "";

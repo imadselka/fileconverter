@@ -31,16 +31,16 @@ type AfterFileUploadType = {
   resetUpload: () => void;
 };
 
-export default function AfterFileUploaded({
+const AfterFileUploaded = ({
   fileUpload,
   resetUpload,
-}: AfterFileUploadType) {
+}: AfterFileUploadType) => {
   const { toast } = useToast();
   const [actions, setActions] = useState<Action[]>([]);
-  const [isReady, setIsReady] = useState<boolean>(false);
-  const [isLoaded, setIsLoaded] = useState<boolean>(false);
-  const [isConverting, setIsConverting] = useState<boolean>(false);
-  const [isDone, setIsDone] = useState<boolean>(false);
+  const [isReady, setIsReady] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
+  const [isDone, setIsDone] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const ffmpegRef = useRef<FFmpeg | null>(null);
 
@@ -88,7 +88,7 @@ export default function AfterFileUploaded({
     );
   };
 
-  const deleteAction = (action: Action): void => {
+  const deleteAction = (action: Action) => {
     setActions((prevActions) =>
       prevActions.filter((a) => a.file_name !== action.file_name)
     );
@@ -112,7 +112,7 @@ export default function AfterFileUploaded({
     document.body.removeChild(a);
   };
 
-  const convert = async (): Promise<void> => {
+  const convert = async () => {
     if (actions.some((action) => !action.to)) {
       toast({
         variant: "destructive",
@@ -209,8 +209,6 @@ export default function AfterFileUploaded({
     console.error(`Conversion error for ${file_name}: ${errorMessage}`);
   };
 
-  if (!actions.length) return null;
-
   return (
     <div className="space-y-6">
       {errorMessage && (
@@ -233,7 +231,7 @@ export default function AfterFileUploaded({
       ))}
     </div>
   );
-}
+};
 
 const ActionCard = ({
   action,
@@ -257,7 +255,7 @@ const ActionCard = ({
   return (
     <div className="relative flex flex-wrap items-center justify-between w-full px-4 py-4 space-y-2 border cursor-pointer lg:py-0 rounded-xl h-fit lg:h-20 lg:px-10 lg:flex-nowrap">
       {!isLoaded && (
-        <Skeleton className="absolute w-full h-full -ml-10 cursor-progress rounded-xl" />
+        <Skeleton className="absolute w-full h-full  cursor-progress rounded-xl" />
       )}
       <div className="flex flex-row justify-center items-center gap-4 w-full lg:w-auto">
         <span className="text-2xl text-orange-800 dark:text-orange-400">
@@ -289,8 +287,8 @@ const ActionCard = ({
           </SelectTrigger>
           <SelectContent>
             {getExtensionsByType(action.file_type)
-              .filter((ext: string) => ext !== action.from)
-              .map((ext: string) => (
+              .filter((ext) => ext !== action.from)
+              .map((ext) => (
                 <SelectItem key={ext} value={ext}>
                   {ext}
                 </SelectItem>
@@ -368,3 +366,5 @@ const ActionCard = ({
     </div>
   );
 };
+
+export default AfterFileUploaded;

@@ -1,6 +1,6 @@
 export const fileExtensions = {
-  image: ["png", "jpg", "gif", "webp", "tiff"],
-  document: ["pdf", "doc", "docx", "csv", "xls", "xlsx", "ppt", "pptx"],
+  image: ["PNG", "JPG", "SVG", "WEBP"],
+  document: ["PDF", "DOC", "DOCX"],
   audio: ["mp3", "wav", "aac", "flac", "ogg"],
   video: ["mp4", "mov", "avi", "mkv", "flv", "wmv"],
 };

@@ -71,7 +71,7 @@ export default async function convert(
 
   // Read output file and create URL
   const data = await ffmpeg.readFile(output);
-  const blob = new Blob([data], { type: file_type.split("/")[0] });
+  const blob = new Blob([data], { type: "image/gif" });
   const url = URL.createObjectURL(blob);
   return { url, output };
 }
