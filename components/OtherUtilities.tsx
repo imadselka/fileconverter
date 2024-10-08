@@ -71,7 +71,7 @@ export default function OtherUtilities() {
       transition={{ duration: 0.5 }}
       className="flex flex-col items-center justify-center bg-background text-foreground"
     >
-      <div className="w-full max-w-4xl px-4">
+      <div className="w-full max-w-7xl px-10">
         <motion.div
           initial={{ y: -20 }}
           animate={{ y: 0 }}
@@ -104,7 +104,7 @@ export default function OtherUtilities() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10 justify-items-center"
         >
           {utilities.map((utility, index) => (
             <motion.div
@@ -113,9 +113,12 @@ export default function OtherUtilities() {
               whileTap={{ scale: 1.05 }}
               className="cursor-auto"
             >
-              <Card className="flex flex-col justify-between h-full">
+              <Card className="flex flex-col justify-between h-full w-[280px]">
                 <CardHeader>
-                  <CardTitle className="text-lg">{utility.title}</CardTitle>
+                  <div className="flex items-center space-x-4 mb-2">
+                    <utility.icon className="h-8 w-8" />
+                    <CardTitle className="text-lg">{utility.title}</CardTitle>
+                  </div>
                   <CardDescription className="text-sm">
                     {utility.description}
                   </CardDescription>
@@ -147,6 +150,7 @@ export default function OtherUtilities() {
                       setOpen(false);
                     }}
                   >
+                    <utility.icon className="mr-2 h-4 w-4" />
                     <span>{utility.title}</span>
                     <CommandShortcut>{utility.shortcut}</CommandShortcut>
                   </CommandItem>
