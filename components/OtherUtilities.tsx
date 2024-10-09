@@ -29,6 +29,8 @@ export default function OtherUtilities() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
 
+  const utilitiesCount = utilities.length;
+
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
@@ -78,9 +80,12 @@ export default function OtherUtilities() {
           transition={{ duration: 0.5 }}
           className="flex flex-col justify-center items-center gap-3"
         >
-          <h1 className="text-4xl font-bold text-center mt-10 mb-6">
+          <h1 className="text-4xl font-bold text-center mt-2">
             Explore Utilities
           </h1>
+          <p className="text-lg text-center mb-6">
+            Total Utilities: <span className="font-bold">{utilitiesCount}</span>
+          </p>
           <motion.div
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
