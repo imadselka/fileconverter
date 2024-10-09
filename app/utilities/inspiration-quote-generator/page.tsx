@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { quotes } from "@/constants/quotes";
 import { Download, QuoteIcon } from "lucide-react";
+import { useTheme } from "next-themes";
 import { useRef, useState } from "react";
 
 export default function InspirationalQuoteGenerator() {
@@ -15,6 +16,7 @@ export default function InspirationalQuoteGenerator() {
     setQuote(randomQuote);
   };
 
+  const theme = useTheme();
   const downloadQuote = () => {
     const canvas = canvasRef.current;
     if (canvas) {
@@ -64,10 +66,17 @@ export default function InspirationalQuoteGenerator() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="p-8 rounded-lg text-white text-center ">
-          <p className="text-2xl font-bold mb-4">{quote.text}</p>
-          <p className="text-xl italic">- {quote.author}</p>
-        </div>
+        {theme.theme === "dark" ? (
+          <div className="p-8 rounded-lg text-white text-center">
+            <p className="text-2xl font-bold mb-4">{quote.text}</p>
+            <p className="text-xl italic">- {quote.author}</p>
+          </div>
+        ) : (
+          <div className="p-8 rounded-lg text-black text-center ">
+            <p className="text-2xl font-bold mb-4">{quote.text}</p>
+            <p className="text-xl italic">- {quote.author}</p>
+          </div>
+        )}
         <div className="flex justify-between">
           <Button variant="ghost" onClick={generateQuote}>
             Generate New Quote
