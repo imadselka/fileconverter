@@ -26,8 +26,9 @@ import {
   UserPlus,
 } from "lucide-react";
 import { BiColor } from "react-icons/bi";
-import { FaMarkdown } from "react-icons/fa";
+import { FaMarkdown, FaQuoteLeft } from "react-icons/fa";
 import { HiCurrencyDollar } from "react-icons/hi";
+import { RiSketching } from "react-icons/ri";
 
 export const utilities = [
   {
@@ -48,7 +49,7 @@ export const utilities = [
     title: "JSON to YAML / YAML to JSON",
     description: "Convert between JSON and YAML formats.",
     link: "utilities/json-yaml",
-    shortcut: "Alt+L",
+    shortcut: "Alt+Y",
     icon: File,
   },
   {
@@ -146,7 +147,7 @@ export const utilities = [
     title: "Currency Converter",
     description: "Convert between different currencies.",
     link: "utilities/currency-converter",
-    shortcut: "Alt+N",
+    shortcut: "Alt+C",
     icon: HiCurrencyDollar,
   },
   {
@@ -174,14 +175,14 @@ export const utilities = [
     title: "Color Converter",
     description: "Convert between different color formats.",
     link: "utilities/color-converter",
-    shortcut: "Alt+C",
+    shortcut: "Alt+O",
     icon: Palette,
   },
   {
     title: "Color Palette Generator",
     description: "Generate color palettes from images.",
     link: "utilities/color-palette-generator",
-    shortcut: "Alt+O",
+    shortcut: "Alt+L",
     icon: BiColor,
   },
   {
@@ -199,11 +200,32 @@ export const utilities = [
     icon: TimerIcon,
   },
   {
-    title: "markdown Note Editor",
+    title: "Markdown Note Editor",
     description: "A simple markdown note editor.",
     link: "utilities/markdown-note-editor",
-    shortcut: "Alt+Y",
+    shortcut: "Alt+N",
     icon: FaMarkdown,
+  },
+  {
+    title: "Pixel Art Creator",
+    description: "Create pixel art with a grid-based canvas.",
+    link: "utilities/pixel-art-creator",
+    shortcut: "Alt+A",
+    icon: RiSketching,
+  },
+  {
+    title: "Morse Code Translator",
+    description: "Translate text to and from Morse code.",
+    link: "utilities/morse-code-translator",
+    shortcut: "Alt+R",
+    icon: FaQuoteLeft,
+  },
+  {
+    title: "Inspiration Quote Generator",
+    description: "Generate inspirational quotes with custom backgrounds.",
+    link: "utilities/inspiration-quote-generator",
+    shortcut: "Alt+Q",
+    icon: FaQuoteLeft,
   },
 ];
 
