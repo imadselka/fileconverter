@@ -30,7 +30,6 @@ The File Converter is a web application that allows users to convert their files
 ## Tech Stack
 
 - **Frontend**: React, Next.js, Tailwind CSS
-- **Backend**: CloudConvert API
 
 ## Idea Behind the Project
 
