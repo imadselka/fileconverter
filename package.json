@@ -35,7 +35,7 @@
     "diff": "^7.0.0",
     "docx": "^8.5.0",
     "file-saver": "^2.0.5",
-    "formidable": "^3.5.1",
+    "formidable": "^3.5.4",
     "framer-motion": "^11.11.1",
     "html2canvas": "^1.4.1",
     "js-yaml": "^4.1.0",
